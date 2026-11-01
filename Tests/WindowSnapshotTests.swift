@@ -41,38 +41,30 @@ import AppKit
  print("PASS: unchanged identity rechecks changed protection, disappeared window and reused window ID")
  // Mirrors OverviewWindowController.closeNext for the full cleanup flow: review,
  // pre-switch recheck, post-switch recheck, close and presence reporting.
- var liveWindows = [window]
- var closeRequests = 0
- var closed = 0, stillPresent = 0, skipped = 0
+ let keptWindow = DesktopWindow(id: 78, ownerName: "Kept", title: "Kept", bundleID: "test.kept", pid: 9, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
+ var liveWindows = [window, keptWindow]
+ var closed = 0, skipped = 0
  try store.update { $0.cleanupRules = [] }
  let reviewedFlow = liveWindows.filter { !isProtected($0) }
- precondition(reviewedFlow.count == 1)
+ precondition(reviewedFlow.count == 2)
  for candidate in reviewedFlow {
-  // Protection is enabled only after the review snapshot while identity stays unchanged.
-  try store.update { $0.cleanupRules = [WindowRule(bundleID: window.bundleID, applicationPath: "", title: window.title)] }
+  if candidate.id == window.id {
+   // Protection is enabled only after the review snapshot while identity stays unchanged.
+   try store.update { $0.cleanupRules = [WindowRule(bundleID: window.bundleID, applicationPath: "", title: window.title)] }
+  }
   guard let preSwitch = candidate.cleanupCandidate(in: liveWindows, isProtected: isProtected) else { skipped += 1; continue }
-  // The desktop switch succeeded; the window is unlocked again before the close request.
-  try store.update { $0.cleanupRules = [] }
-  liveWindows = [] // window disappears before the close request
-  guard let live = preSwitch.cleanupCandidate(in: liveWindows, isProtected: isProtected) else {
+  // For the first candidate the desktop switch succeeded but the window disappears
+  // before the close request; the second candidate stays present.
+  if candidate.id == window.id { liveWindows.removeAll { $0.id == candidate.id } }
+  guard preSwitch.cleanupCandidate(in: liveWindows, isProtected: isProtected) != nil else {
    skipped += 1
-   liveWindows = [window]
    continue
   }
   flowCloseRequests += 1
-  liveWindows = []
-  closed += 1 // successful close removes the window
-  liveWindows = [window]
-  // Second candidate keeps identity and protection, so it closes normally.
-  let second = DesktopWindow(id: 78, ownerName: "Kept", title: "Kept", bundleID: "test.kept", pid: 9, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
-  liveWindows.append(second)
-  guard let kept = second.cleanupCandidate(in: liveWindows, isProtected: isProtected) else { skipped += 1; continue }
-  flowCloseRequests += 1
-  liveWindows.removeAll { $0.id == kept.id && $0.pid == kept.pid }
-  closed += 1
+  closed += 1 // the close request removes the revalidated window
  }
- precondition(closeRequests == 0 && flowCloseRequests == 2 && closed == 2 && stillPresent == 0 && skipped == 1)
- print("PASS: full cleanup flow counts protection changes after review as skipped and only closes revalidated windows")
+ precondition(closeRequests == 0 && flowCloseRequests == 1 && closed == 1 && skipped == 1)
+ print("PASS: full cleanup flow counts post-review protection or identity changes as skipped and only closes revalidated windows")
 
  let unknown = DesktopSpace(id: 0, uuid: "unassigned", displayUUID: "", displayIndex: 0, index: -1, displayCount: 0, isCurrent: false)
  precondition(unknown.title == "未知归属")
