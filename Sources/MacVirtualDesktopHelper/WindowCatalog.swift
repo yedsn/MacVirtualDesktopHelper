@@ -80,11 +80,13 @@ final class WindowCatalog {
 					isSticky: isSticky,
 					icon: app?.icon
 				)
-				windowsBySpace[targetSpaceID, default: []].append(window)
+				for memberSpaceID in associatedSpaceIDs {
+					windowsBySpace[memberSpaceID, default: []].append(window)
+				}
 			}
 		}
 
-		let groups = spaces.map { space in
+		var groups = spaces.map { space in
 			let windows = (windowsBySpace[space.id] ?? []).sorted {
 				if $0.ownerName.caseInsensitiveCompare($1.ownerName) != .orderedSame {
 					return $0.ownerName.localizedCaseInsensitiveCompare($1.ownerName) == .orderedAscending
@@ -93,6 +95,23 @@ final class WindowCatalog {
 			}
 			return WindowGroup(space: space, windows: windows)
 		}
+
+  // CG may retain closed records. Only expose unmatched records still present in AX.
+  let accessibility = AccessibilityWindowService()
+  if accessibility.isTrusted {
+   var unknown: [DesktopWindow] = []
+   for (windowID, info) in windowInfo where !seenWindowIDs.contains(windowID) {
+    guard shouldInclude(info: info, currentPID: currentPID), skyLight.spaceIDs(for: windowID).allSatisfy({ !spaceIDs.contains($0) }) else { continue }
+    let pid = int32Value(info[kCGWindowOwnerPID as String]) ?? 0
+    let app = NSRunningApplication(processIdentifier: pid)
+    let item = DesktopWindow(id: windowID, ownerName: stringValue(info[kCGWindowOwnerName as String]) ?? app?.localizedName ?? "未知应用", title: stringValue(info[kCGWindowName as String]) ?? "", bundleID: app?.bundleIdentifier ?? "", pid: pid, spaceID: 0, displayUUID: "", isOnScreen: boolValue(info[kCGWindowIsOnscreen as String]) ?? false, isSticky: false, icon: app?.icon)
+    if accessibility.containsWindow(item) { unknown.append(item) }
+   }
+   if !unknown.isEmpty {
+    let unassigned = DesktopSpace(id: 0, uuid: "unassigned", displayUUID: "", displayIndex: 0, index: -1, displayCount: 0, isCurrent: false)
+    groups.append(WindowGroup(space: unassigned, windows: unknown.sorted { $0.ownerName.localizedCaseInsensitiveCompare($1.ownerName) == .orderedAscending }))
+   }
+  }
 
 		return WindowSnapshot(spaces: spaces, groups: groups, capturedAt: Date())
 	}

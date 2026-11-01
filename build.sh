@@ -9,10 +9,24 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 
 mkdir -p "$MACOS_DIR"
 cp "$SCRIPT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
+mkdir -p "$CONTENTS_DIR/Resources"
+cp "$SCRIPT_DIR/LICENSE.md" "$CONTENTS_DIR/Resources/LICENSE.md"
+cp "$SCRIPT_DIR/Native/YABAI-LICENSE.txt" "$CONTENTS_DIR/Resources/YABAI-LICENSE.txt"
 
-xcrun clang -target arm64-apple-macos13.0 -fobjc-arc -O2 -c "$SCRIPT_DIR/Native/SkyLightBridge.m" -o "$BUILD_DIR/SkyLightBridge.o"
+if xcrun -f swiftc >/dev/null 2>&1; then
+	SWIFTC=(xcrun swiftc)
+	CLANG=(xcrun clang)
+else
+	# xcrun refuses to run until the Xcode license is accepted, while the
+	# standalone Command Line Tools toolchain remains usable.
+	CLT_BIN=/Library/Developer/CommandLineTools/usr/bin
+	SWIFTC=("$CLT_BIN/swiftc")
+	CLANG=("$CLT_BIN/clang")
+fi
 
-xcrun swiftc -target arm64-apple-macos13.0 \
+"${CLANG[@]}" -target arm64-apple-macos13.0 -fobjc-arc -O2 -c "$SCRIPT_DIR/Native/SkyLightBridge.m" -o "$BUILD_DIR/SkyLightBridge.o"
+
+"${SWIFTC[@]}" -target arm64-apple-macos13.0 \
 	-swift-version 5 \
 	-O \
 	-framework AppKit \

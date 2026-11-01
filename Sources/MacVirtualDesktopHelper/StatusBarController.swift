@@ -12,6 +12,14 @@ final class StatusBarController: NSObject {
 	private var spaceItems: [SpaceItemBinding] = []
 	private var lastSignature = ""
 	private var refreshTimer: Timer?
+ private var navigationItems: [NSStatusItem] = []
+ var settings: () -> ApplicationSettings = { ApplicationSettings() }
+ var showSettings: (() -> Void)?
+ var showSnapshots: (() -> Void)?
+ var showAbout: (() -> Void)?
+ var showSupport: (() -> Void)?
+ private var compactItem: NSStatusItem?
+ private var compactView: CompactStatusView?
 
 	init(skyLight: SkyLightService, showOverview: @escaping () -> Void) {
 		self.skyLight = skyLight
@@ -49,19 +57,56 @@ final class StatusBarController: NSObject {
 	func refresh(forceRebuild: Bool = false) {
 		let spaces = skyLight.spaces()
 		guard !spaces.isEmpty else { return }
-		let signature = spaces.map { "\($0.displayUUID):\($0.uuid)" }.joined(separator: "|")
-		if forceRebuild || signature != lastSignature {
-			rebuildStatusItems(spaces: spaces)
-			lastSignature = signature
-		}
-		updateCurrentSpaceHighlight(spaces: spaces)
-		if ProcessInfo.processInfo.arguments.contains("--diagnostics") {
-			let lines = spaceItems.map { "id=\($0.space.id) visible=\($0.item.isVisible) frame=\(String(describing: $0.item.button?.window?.frame))" }
-			try? lines.joined(separator: " | ").write(toFile: "/tmp/wvdh-status-diagnostics.txt", atomically: true, encoding: .utf8)
-		}
-	}
+  updateCompact(spaces)
+ }
+
+ private func updateCompact(_ spaces: [DesktopSpace]) {
+  if compactItem == nil {
+   navigationItems.forEach { NSStatusBar.system.removeStatusItem($0) }; navigationItems.removeAll()
+   spaceItems.forEach { NSStatusBar.system.removeStatusItem($0.item) }; spaceItems.removeAll()
+   if let overviewItem { NSStatusBar.system.removeStatusItem(overviewItem); self.overviewItem = nil }
+   let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+   item.autosaveName = "mvdh.compact"
+   let view = CompactStatusView()
+   view.clickScreenLocation = { NSEvent.mouseLocation }
+   view.selectSpace = { [weak self] space in self?.skyLight.setCurrentSpace(displayUUID: space.displayUUID, spaceID: space.id) }
+   view.showManager = { [weak self] in
+    guard let self else { return }
+    if self.settings().windowManager == "system" { NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Mission Control.app")) } else { self.showOverview() }
+   }
+   view.showMenu = { [weak self, weak view] event in
+    guard let self, let view else { return }
+    self.showContextMenu(for: view, event: event)
+   }
+   item.button?.addSubview(view)
+   item.button?.target = self
+   item.button?.action = #selector(compactClicked(_:))
+   item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+   compactItem = item; compactView = view
+  }
+  guard let compactView, let compactItem else { return }
+  compactView.spaces = spaces
+  compactView.navigation = settings().desktopDisplayMode == "navigation"
+  compactView.showNameInitial = settings().showDesktopNameInitial == true
+  compactView.hideNavigationAtBounds = settings().hideNavigationAtBounds
+  compactView.iconSpacing = CGFloat(settings().menuIconSpacing ?? 8)
+  compactView.foreground = CompactStatusView.color(settings().menuForeground)
+  compactView.symbolForeground = CompactStatusView.color(settings().menuSymbolForeground)
+  compactView.background = CompactStatusView.color(settings().menuBackground)
+  compactView.fontName = settings().menuFontName
+  compactView.fontSize = CGFloat(settings().menuFontSize ?? 11)
+  compactItem.length = compactView.requiredWidth
+  compactView.frame = NSRect(x: 0, y: 0, width: compactView.requiredWidth, height: NSStatusBar.system.thickness)
+  compactView.toolTip = "点击编号切换桌面；四方块打开窗口管理；右键打开菜单".localized
+ }
+ @objc private func compactClicked(_ sender: NSStatusBarButton) {
+  guard let event = NSApp.currentEvent, let compactView else { return }
+  if event.type == .rightMouseUp { compactView.rightMouseDown(with: event) } else { compactView.mouseDown(with: event) }
+ }
 
 	private func rebuildStatusItems(spaces: [DesktopSpace]) {
+  navigationItems.forEach { NSStatusBar.system.removeStatusItem($0) }
+  navigationItems.removeAll()
 		if let overviewItem {
 			NSStatusBar.system.removeStatusItem(overviewItem)
 		}
@@ -77,13 +122,8 @@ final class StatusBarController: NSObject {
 		overview.autosaveName = "mvdh.overview"
 		overview.behavior = []
 		overview.isVisible = true
-		if let image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: "所有窗口") {
-			image.isTemplate = true
-			overview.button?.image = image
-		} else {
-			overview.button?.title = "▦"
-		}
-		overview.button?.toolTip = "所有窗口"
+		overview.button?.image = TrayIconRenderer.manager()
+		overview.button?.toolTip = "所有窗口".localized
 		overview.button?.target = self
 		overview.button?.action = #selector(overviewClicked(_:))
 		overview.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -100,22 +140,40 @@ final class StatusBarController: NSObject {
 			item.button?.toolTip = space.title
 			spaceItems.append(SpaceItemBinding(space: space, item: item))
 		}
+  if settings().desktopDisplayMode == "navigation" {
+   for direction in [1, -1] {
+    let item = NSStatusBar.system.statusItem(withLength: 28)
+    item.button?.title = direction == 1 ? "›" : "‹"
+    item.button?.tag = direction
+    item.button?.target = self; item.button?.action = #selector(navigate(_:))
+    navigationItems.append(item)
+   }
+  }
 	}
+ private func updateNavigation(_ spaces: [DesktopSpace]) {
+  let navigation = settings().desktopDisplayMode == "navigation"
+  for binding in spaceItems { binding.item.isVisible = !navigation || spaces.contains { $0.id == binding.space.id && $0.isCurrent } }
+  guard let current = spaces.firstIndex(where: { $0.isCurrent }) else { return }
+  for item in navigationItems {
+   let destination = current + (item.button?.tag ?? 0)
+   let valid = spaces.indices.contains(destination)
+   item.button?.isEnabled = valid
+   item.isVisible = valid || !settings().hideNavigationAtBounds
+  }
+ }
+ @objc private func navigate(_ sender: NSStatusBarButton) {
+  let spaces = skyLight.spaces()
+  guard let current = spaces.firstIndex(where: { $0.isCurrent }), spaces.indices.contains(current + sender.tag) else { return }
+  let target = spaces[current + sender.tag]
+  skyLight.setCurrentSpace(displayUUID: target.displayUUID, spaceID: target.id)
+ }
 
 	private func updateCurrentSpaceHighlight(spaces: [DesktopSpace]) {
 		for binding in spaceItems {
 			let isCurrent = spaces.first(where: { $0.id == binding.space.id })?.isCurrent ?? false
 			let number = binding.space.index + 1
-			let text = isCurrent ? "●\(number)" : " \(number)"
-			let font = NSFont.monospacedDigitSystemFont(
-				ofSize: 13,
-				weight: isCurrent ? .bold : .medium
-			)
-			let color = isCurrent ? NSColor.controlAccentColor : NSColor.labelColor
-			binding.item.button?.attributedTitle = NSAttributedString(
-				string: text,
-				attributes: [.font: font, .foregroundColor: color]
-			)
+			binding.item.button?.title = ""
+			binding.item.button?.image = TrayIconRenderer.desktop(number: number, current: isCurrent)
 			binding.item.button?.toolTip = isCurrent ? "\(binding.space.title)（当前）" : binding.space.title
 			binding.item.button?.setAccessibilityLabel(isCurrent ? "\(binding.space.title)，当前" : binding.space.title)
 		}
@@ -141,19 +199,40 @@ final class StatusBarController: NSObject {
 			showContextMenu(for: sender)
 			return
 		}
-		showOverview()
+  if settings().windowManager == "system" {
+   NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Mission Control.app"))
+  } else { showOverview() }
 	}
 
-	private func showContextMenu(for button: NSStatusBarButton) {
+	private func showContextMenu(for button: NSView, event: NSEvent? = nil) {
 		let menu = NSMenu()
-		menu.addItem(withTitle: "所有窗口…", action: #selector(openOverviewFromMenu), keyEquivalent: "").target = self
-		menu.addItem(withTitle: "刷新桌面", action: #selector(refreshFromMenu), keyEquivalent: "").target = self
+  menu.addItem(withTitle: "规则快照…".localized, action: #selector(openSnapshots), keyEquivalent: "").target = self
+  let managerItem = NSMenuItem(title: "窗口管理器".localized, action: nil, keyEquivalent: "")
+  let managerMenu = NSMenu()
+  let builtIn = managerMenu.addItem(withTitle: "内置所有窗口".localized, action: #selector(openBuiltInManager), keyEquivalent: "")
+  builtIn.target = self; builtIn.state = settings().windowManager == "system" ? .off : .on
+  let system = managerMenu.addItem(withTitle: "系统 Mission Control".localized, action: #selector(openSystemManager), keyEquivalent: "")
+  system.target = self; system.state = settings().windowManager == "system" ? .on : .off
+  managerItem.submenu = managerMenu
+  menu.addItem(managerItem)
 		menu.addItem(NSMenuItem.separator())
-		menu.addItem(withTitle: "辅助功能权限…", action: #selector(openPermissions), keyEquivalent: "").target = self
-		menu.addItem(withTitle: "屏幕录制权限…", action: #selector(openScreenRecording), keyEquivalent: "").target = self
+  for space in skyLight.spaces() {
+   let title = space.title + (space.isCurrent ? "（当前）".localized : "")
+   let item = menu.addItem(withTitle: title, action: #selector(openDesktopFromMenu(_:)), keyEquivalent: "")
+   item.target = self
+   item.representedObject = [space.displayUUID, String(space.id)]
+   item.state = space.isCurrent ? .on : .off
+  }
+  menu.addItem(NSMenuItem.separator())
+  menu.addItem(withTitle: "关于 MacVirtualDesktopHelper".localized, action: #selector(openAbout), keyEquivalent: "").target = self
+  menu.addItem(withTitle: "支持原作者…".localized, action: #selector(openSupport), keyEquivalent: "").target = self
+  menu.addItem(withTitle: "设置…".localized, action: #selector(openSettings), keyEquivalent: ",").target = self
+  menu.addItem(withTitle: "刷新桌面".localized, action: #selector(refreshFromMenu), keyEquivalent: "").target = self
+		menu.addItem(withTitle: "辅助功能权限…".localized, action: #selector(openPermissions), keyEquivalent: "").target = self
+		menu.addItem(withTitle: "屏幕录制权限…".localized, action: #selector(openScreenRecording), keyEquivalent: "").target = self
 		menu.addItem(NSMenuItem.separator())
-		menu.addItem(withTitle: "退出 MacVirtualDesktopHelper", action: #selector(quit), keyEquivalent: "q").target = self
-		if let event = NSApp.currentEvent {
+		menu.addItem(withTitle: "退出 MacVirtualDesktopHelper".localized, action: #selector(quit), keyEquivalent: "q").target = self
+		if let event = event ?? NSApp.currentEvent {
 			NSMenu.popUpContextMenu(menu, with: event, for: button)
 		} else {
 			menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
@@ -163,6 +242,16 @@ final class StatusBarController: NSObject {
 	@objc private func openOverviewFromMenu() {
 		showOverview()
 	}
+ @objc private func openSnapshots() { showSnapshots?() }
+ @objc private func openAbout() { showAbout?() }
+ @objc private func openSupport() { showSupport?() }
+ @objc private func openBuiltInManager() { showOverview() }
+ @objc private func openSystemManager() { NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Mission Control.app")) }
+ @objc private func openDesktopFromMenu(_ sender: NSMenuItem) {
+  guard let values = sender.representedObject as? [String], values.count == 2, let id = UInt64(values[1]) else { return }
+  skyLight.setCurrentSpace(displayUUID: values[0], spaceID: id)
+ }
+ @objc private func openSettings() { showSettings?() }
 
 	@objc private func refreshFromMenu() {
 		refresh(forceRebuild: true)

@@ -10,6 +10,7 @@ struct DesktopSpace: Identifiable {
 	let isCurrent: Bool
 
 	var title: String {
+  if id == 0 { return "未知归属".localized }
 		if displayCount > 1 {
 			return "显示器 \(displayIndex + 1) · 桌面 \(index + 1)"
 		}
@@ -35,8 +36,9 @@ struct DesktopWindow: Identifiable {
 
 	var displayTitle: String {
 		let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-		return trimmed.isEmpty ? "（无标题窗口）" : trimmed
+		return trimmed.isEmpty ? "（无标题窗口）".localized : trimmed
 	}
+ var hasKnownSpace: Bool { spaceID != 0 }
 }
 
 struct WindowGroup {
@@ -50,6 +52,6 @@ struct WindowSnapshot {
 	let capturedAt: Date
 
 	var windowCount: Int {
-		return groups.reduce(0) { $0 + $1.windows.count }
+		return Set(groups.flatMap(\.windows).map(\.id)).count
 	}
 }
