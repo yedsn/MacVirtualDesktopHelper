@@ -41,8 +41,17 @@ final class WindowCatalog {
 		let spaceIDs = Set(spaces.map(\.id))
 		let windowInfo = cgWindowInfo()
 		let currentPID = ProcessInfo.processInfo.processIdentifier
+		let accessibility = AccessibilityWindowService()
+		var minimizedWindowIDsByPID: [pid_t: Set<CGWindowID>?] = [:]
 		var seenWindowIDs = Set<CGWindowID>()
 		var windowsBySpace: [UInt64: [DesktopWindow]] = [:]
+
+		func minimizedWindowIDs(for pid: pid_t) -> Set<CGWindowID>? {
+			if let cached = minimizedWindowIDsByPID[pid] { return cached }
+			let detected = accessibility.minimizedWindowIDs(pid: pid)
+			minimizedWindowIDsByPID[pid] = detected
+			return detected
+		}
 
 		for space in spaces {
 			for windowID in skyLight.windowIDs(on: space.id) where !seenWindowIDs.contains(windowID) {
@@ -68,7 +77,7 @@ final class WindowCatalog {
 				let ownerName = stringValue(info[kCGWindowOwnerName as String])
 					?? app?.localizedName
 					?? "未知应用"
-				let window = DesktopWindow(
+				var window = DesktopWindow(
 					id: windowID,
 					ownerName: ownerName,
 					title: stringValue(info[kCGWindowName as String]) ?? "",
@@ -80,6 +89,8 @@ final class WindowCatalog {
 					isSticky: isSticky,
 					icon: app?.icon
 				)
+				window.isMinimized = minimizedWindowIDs(for: pid)?.contains(windowID) ?? false
+				window.isApplicationHidden = app?.isHidden ?? false
 				for memberSpaceID in associatedSpaceIDs {
 					windowsBySpace[memberSpaceID, default: []].append(window)
 				}
@@ -97,14 +108,15 @@ final class WindowCatalog {
 		}
 
   // CG may retain closed records. Only expose unmatched records still present in AX.
-  let accessibility = AccessibilityWindowService()
   if accessibility.isTrusted {
    var unknown: [DesktopWindow] = []
    for (windowID, info) in windowInfo where !seenWindowIDs.contains(windowID) {
     guard shouldInclude(info: info, currentPID: currentPID), skyLight.spaceIDs(for: windowID).allSatisfy({ !spaceIDs.contains($0) }) else { continue }
     let pid = int32Value(info[kCGWindowOwnerPID as String]) ?? 0
     let app = NSRunningApplication(processIdentifier: pid)
-    let item = DesktopWindow(id: windowID, ownerName: stringValue(info[kCGWindowOwnerName as String]) ?? app?.localizedName ?? "未知应用", title: stringValue(info[kCGWindowName as String]) ?? "", bundleID: app?.bundleIdentifier ?? "", pid: pid, spaceID: 0, displayUUID: "", isOnScreen: boolValue(info[kCGWindowIsOnscreen as String]) ?? false, isSticky: false, icon: app?.icon)
+    var item = DesktopWindow(id: windowID, ownerName: stringValue(info[kCGWindowOwnerName as String]) ?? app?.localizedName ?? "未知应用", title: stringValue(info[kCGWindowName as String]) ?? "", bundleID: app?.bundleIdentifier ?? "", pid: pid, spaceID: 0, displayUUID: "", isOnScreen: boolValue(info[kCGWindowIsOnscreen as String]) ?? false, isSticky: false, icon: app?.icon)
+    item.isMinimized = minimizedWindowIDs(for: pid)?.contains(windowID) ?? false
+    item.isApplicationHidden = app?.isHidden ?? false
     if accessibility.containsWindow(item) { unknown.append(item) }
    }
    if !unknown.isEmpty {

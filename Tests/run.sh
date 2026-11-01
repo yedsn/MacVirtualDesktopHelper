@@ -17,7 +17,7 @@ fi
 "$test_dir/hotkeys"
 "${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/RuleStore.swift" "$sources/Models.swift" "$sources/DesktopOverlay.swift" Tests/DesktopOverlayTests.swift -o "$test_dir/overlay"
 "$test_dir/overlay"
-"${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/Models.swift" Tests/WindowSnapshotTests.swift -o "$test_dir/snapshot"
+"${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/RuleStore.swift" "$sources/Models.swift" Tests/WindowSnapshotTests.swift -o "$test_dir/snapshot"
 "$test_dir/snapshot"
 "${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/Models.swift" "$sources/CompactStatusView.swift" Tests/CompactStatusViewTests.swift -o "$test_dir/status-view"
 "$test_dir/status-view"

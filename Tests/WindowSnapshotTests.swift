@@ -1,7 +1,7 @@
 import AppKit
 
 @main struct WindowSnapshotTests {
- static func main() {
+ static func main() throws {
  let first = DesktopSpace(id: 10, uuid: "first", displayUUID: "display", displayIndex: 0, index: 0, displayCount: 1, isCurrent: true)
  let second = DesktopSpace(id: 20, uuid: "second", displayUUID: "display", displayIndex: 0, index: 1, displayCount: 1, isCurrent: false)
  let window = DesktopWindow(id: 77, ownerName: "Shared", title: "Document", bundleID: "test.shared", pid: 1, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: true, icon: nil)
@@ -15,13 +15,61 @@ import AppKit
  precondition(window.cleanupCandidate(in: [], isProtected: { _ in protected }) == nil)
  let reusedID = DesktopWindow(id: 77, ownerName: window.ownerName, title: window.title, bundleID: window.bundleID, pid: 2, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
  precondition(window.cleanupCandidate(in: [reusedID], isProtected: { _ in false }) == nil)
+ let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+ defer { try? FileManager.default.removeItem(at: directory) }
+ let store = try RuleStore(url: directory.appendingPathComponent("state.json"))
+ let isProtected: (DesktopWindow) -> Bool = { live in
+  store.state.cleanupRules.contains { $0.matchResult(bundleID: live.bundleID, applicationPath: "", title: live.title) != .notMatched }
+ }
+ let reviewed = [window].filter { !isProtected($0) }
+ precondition(reviewed.count == 1)
+ try store.update { $0.cleanupRules = [WindowRule(bundleID: window.bundleID, applicationPath: "", title: window.title)] }
+ var closeRequests = 0
+ for candidate in reviewed {
+  if candidate.cleanupCandidate(in: [window], isProtected: isProtected) != nil { closeRequests += 1 }
+ }
+ precondition(closeRequests == 0)
+ let reloaded = try RuleStore(url: directory.appendingPathComponent("state.json"))
+ precondition(reloaded.state.cleanupRules.count == 1)
+ try store.update { $0.cleanupRules = [] }
+ let beforeSwitch = window.cleanupCandidate(in: [window], isProtected: isProtected)
+ precondition(beforeSwitch != nil)
+ try store.update { $0.cleanupRules = [WindowRule(bundleID: window.bundleID, applicationPath: "", title: window.title)] }
+ precondition(beforeSwitch!.cleanupCandidate(in: [window], isProtected: isProtected) == nil)
+ print("PASS: persisted protection changes after review and between desktop checks prevent close requests with unchanged identity")
  print("PASS: unchanged identity rechecks changed protection, disappeared window and reused window ID")
 
  let unknown = DesktopSpace(id: 0, uuid: "unassigned", displayUUID: "", displayIndex: 0, index: -1, displayCount: 0, isCurrent: false)
  precondition(unknown.title == "未知归属")
+
+ let visible = DesktopWindow(id: 81, ownerName: "A", title: "Visible", bundleID: "test.a", pid: 1, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
+ var minimized = DesktopWindow(id: 82, ownerName: "B", title: "Minimized", bundleID: "test.b", pid: 2, spaceID: 10, displayUUID: "display", isOnScreen: false, isSticky: false, icon: nil)
+ minimized.isMinimized = true
+ var hidden = DesktopWindow(id: 83, ownerName: "C", title: "Hidden", bundleID: "test.c", pid: 3, spaceID: 20, displayUUID: "display", isOnScreen: false, isSticky: false, icon: nil)
+ hidden.isApplicationHidden = true
+ var sharedMinimized = DesktopWindow(id: 84, ownerName: "D", title: "Shared", bundleID: "test.d", pid: 4, spaceID: 10, displayUUID: "display", isOnScreen: false, isSticky: true, icon: nil)
+ sharedMinimized.isMinimized = true
+ let backgroundGroups = WindowSnapshot.overviewGroups([
+  WindowGroup(space: first, windows: [visible, minimized, sharedMinimized]),
+  WindowGroup(space: second, windows: [hidden, sharedMinimized])
+ ])
+ precondition(backgroundGroups.count == 3)
+ precondition(backgroundGroups[0].space.id == DesktopSpace.backgroundWindowsID)
+ precondition(backgroundGroups[0].windows.map(\.id) == [82, 83, 84])
+ precondition(backgroundGroups[1].space.id == first.id && backgroundGroups[1].windows.map(\.id) == [81])
+ precondition(backgroundGroups[2].space.id == second.id && backgroundGroups[2].windows.isEmpty)
+ var mixed = visible
+ mixed.isMinimized = true
+ mixed.isApplicationHidden = true
+ precondition(mixed.backgroundStateDescription == "已最小化 · 应用已隐藏")
+ let unchanged = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible])])
+ precondition(unchanged.count == 1 && unchanged[0].space.id == first.id && unchanged[0].windows.map(\.id) == [81])
+ print("PASS: minimized and hidden windows move to one deduplicated leading card while normal cards stay in place")
+
  Localization.language = "en"
  precondition(first.title == "Desktop 1")
  precondition(unknown.title == "Unknown ownership")
+ precondition(DesktopSpace.backgroundWindowsSpace.title == "Hidden or minimized")
  let external = DesktopSpace(id: 30, uuid: "third", displayUUID: "external", displayIndex: 1, index: 2, displayCount: 2, isCurrent: false)
  precondition(external.title == "Display 2 · Desktop 3")
  Localization.language = "zh-CN"

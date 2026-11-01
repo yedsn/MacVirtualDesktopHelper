@@ -83,6 +83,11 @@ final class SkyLightService {
 				userSpaces.append((id, uuid))
 			}
 
+			// Native full screen creates a transient Space outside the regular
+			// desktop list. Keep the owning desktop prominent until that Space
+			// becomes one of the enumerated user desktops.
+			let activeRegular = userSpaces.first(where: { $0.id == currentSpaceID })
+			let activeIndex = activeRegular.map { id in userSpaces.firstIndex(where: { $0.id == id.id }) } ?? nil
 			for (index, space) in userSpaces.enumerated() {
 				result.append(DesktopSpace(
 					id: space.id,
@@ -91,7 +96,7 @@ final class SkyLightService {
 					displayIndex: displayIndex,
 					index: index,
 					displayCount: displays.count,
-					isCurrent: space.id == currentSpaceID
+					isCurrent: activeIndex.map { space.id == userSpaces[$0].id } ?? false
 				))
 			}
 		}

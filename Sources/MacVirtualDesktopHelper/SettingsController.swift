@@ -210,7 +210,7 @@ final class SettingsController: NSWindowController {
   switch status {
   case .enabled: loginStatus.stringValue = "登录项已启用".localized
   case .requiresApproval: loginStatus.stringValue = "等待系统批准，请在登录项设置中启用".localized
-  case .notFound: loginStatus.stringValue = "系统未找到应用，请将应用安装到固定位置后重试".localized
+  case .notFound: loginStatus.stringValue = "登录项尚未注册，可勾选启用；移动应用后请重新启用".localized
   default: loginStatus.stringValue = "登录项未启用".localized
   }
  }

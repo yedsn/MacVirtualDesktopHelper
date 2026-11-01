@@ -41,13 +41,17 @@ final class AccessibilityWindowService {
 			return "当前无法读取该窗口的辅助功能对象。".localized
 		}
 
+		if app.isHidden { app.unhide() }
 		_ = app.activate(options: [.activateAllWindows])
 		let application = AXUIElementCreateApplication(target.pid)
 		AXUIElementSetMessagingTimeout(application, 1.5)
 		_ = AXUIElementSetAttributeValue(application, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+		// A minimized AX window can be raised without becoming visible on some
+		// apps, so restore it before asking for focus.
+		let restoreResult = AXUIElementSetAttributeValue(axWindow, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
 		let result = AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
 		let focusResult = AXUIElementSetAttributeValue(axWindow, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-		if result != .success && focusResult != .success {
+		if result != .success && focusResult != .success && restoreResult != .success {
 			return "窗口激活失败（AX 错误 \(result.rawValue)）。"
 		}
 		return nil
@@ -55,6 +59,14 @@ final class AccessibilityWindowService {
 
 	func containsWindow(_ target: DesktopWindow) -> Bool {
 		return accessibilityWindow(windowID: target.id, pid: target.pid) != nil
+	}
+
+	func isMinimized(_ target: DesktopWindow) -> Bool? {
+		guard let window = accessibilityWindow(windowID: target.id, pid: target.pid) else { return nil }
+		var value: CFTypeRef?
+		guard AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success,
+			let value else { return nil }
+		return (value as? NSNumber)?.boolValue
 	}
 
  // nil means the application could not be inspected, never proof of closure.
@@ -86,6 +98,28 @@ final class AccessibilityWindowService {
   var id: CGWindowID = 0
   return getWindow(window, &id) == .success ? id : nil
  }
+
+	/// Returns the minimized window IDs owned by an application. `nil` means
+	/// accessibility could not inspect the application, not that no window is
+	/// minimized, so callers must keep their previous classification in that case.
+	func minimizedWindowIDs(pid: pid_t) -> Set<CGWindowID>? {
+		guard isTrusted, let getWindow else { return nil }
+		let application = AXUIElementCreateApplication(pid)
+		AXUIElementSetMessagingTimeout(application, 0.5)
+		var value: CFTypeRef?
+		guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &value) == .success,
+			let windows = value as? [AXUIElement] else { return nil }
+		var result = Set<CGWindowID>()
+		for window in windows {
+			var windowID: CGWindowID = 0
+			guard getWindow(window, &windowID) == .success else { continue }
+			var minimized: CFTypeRef?
+			guard AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &minimized) == .success,
+				let minimized, (minimized as? NSNumber)?.boolValue == true else { continue }
+			result.insert(windowID)
+		}
+		return result
+	}
 
 	func close(_ target: DesktopWindow) -> String? {
 		guard isTrusted else { return "需要先授予辅助功能权限。".localized }

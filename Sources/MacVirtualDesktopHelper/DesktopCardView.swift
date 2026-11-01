@@ -81,11 +81,11 @@ final class DesktopCardView: NSView, NSTableViewDataSource, NSTableViewDelegate 
  }
  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
  override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-  guard group.space.id != 0 else { return [] }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return [] }
   return sender.draggingPasteboard.string(forType: NSPasteboard.PasteboardType("local.macvirtualdesktophelper.window")) == nil ? [] : .move
  }
  override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-  guard group.space.id != 0 else { return false }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return false }
   guard let text = sender.draggingPasteboard.string(forType: NSPasteboard.PasteboardType("local.macvirtualdesktophelper.window")), let id = UInt32(text) else { return false }
   onDrop?(id, group.space.id)
   return true
@@ -111,7 +111,9 @@ final class DesktopCardView: NSView, NSTableViewDataSource, NSTableViewDelegate 
   cell.addSubview(lock)
   let icon = NSImageView(frame: NSRect(x: 27, y: 5, width: 18, height: 18))
   icon.image = item.icon
-  let label = NSTextField(labelWithString: item.displayTitle + " — " + item.ownerName)
+  let state = item.backgroundStateDescription
+  let rowText = item.displayTitle + " — " + item.ownerName + (state.isEmpty ? "" : " · " + state)
+  let label = NSTextField(labelWithString: rowText)
   label.frame = NSRect(x: 52, y: 4, width: max(20, table.bounds.width - 58), height: fontSize + 6)
   label.autoresizingMask = [.width]
   label.font = .systemFont(ofSize: fontSize)
@@ -135,12 +137,12 @@ final class DesktopCardView: NSView, NSTableViewDataSource, NSTableViewDelegate 
   return item
  }
  func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation operation: NSTableView.DropOperation) -> NSDragOperation {
-  guard group.space.id != 0 else { return [] }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return [] }
   tableView.setDropRow(-1, dropOperation: .on)
   return .move
  }
  func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-  guard group.space.id != 0 else { return false }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return false }
   guard let text = info.draggingPasteboard.string(forType: NSPasteboard.PasteboardType("local.macvirtualdesktophelper.window")), let id = UInt32(text) else { return false }
   onDrop?(id, group.space.id)
   return true

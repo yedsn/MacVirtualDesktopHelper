@@ -181,11 +181,12 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 
 	private func filterSnapshot() {
 		let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-		groups = snapshot?.groups.map { group in
+		let displayedGroups = WindowSnapshot.overviewGroups(snapshot?.groups ?? [])
+		groups = displayedGroups.map { group in
 			OverviewGroupItem(space: group.space, windows: group.windows.filter {
 				query.isEmpty || $0.ownerName.localizedCaseInsensitiveContains(query) || $0.title.localizedCaseInsensitiveContains(query)
 			})
-		} ?? []
+		}
 		renderCards()
   outlineView.reloadData()
 		for group in groups {
@@ -650,7 +651,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard let current = item.cleanupCandidate(in: uniqueWindows, isProtected: isCleanupLocked) else {
    DispatchQueue.main.async { [weak self] in self?.closeNext(Array(candidates.dropFirst()), closed: closed, remaining: remaining, failed: failed + 1) }; return
   }
-  let needsSwitch = !current.isSticky && !skyLight.spaces().contains { $0.id == current.spaceID && $0.isCurrent }
+		let needsSwitch = !current.belongsToBackgroundSection && !current.isSticky && !skyLight.spaces().contains { $0.id == current.spaceID && $0.isCurrent }
   if needsSwitch { skyLight.setCurrentSpace(displayUUID: current.displayUUID, spaceID: current.spaceID) }
   waitForDesktop(current.spaceID, required: needsSwitch, onFailure: { [weak self] in
    self?.closeNext(Array(candidates.dropFirst()), closed: closed, remaining: remaining, failed: failed + 1)
@@ -838,7 +839,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 			setStatus("请先授予辅助功能权限。".localized, isError: true)
 			return
 		}
-		let needsSwitch = target.hasKnownSpace && !target.isSticky && !skyLight.spaces().contains(where: { $0.id == target.spaceID && $0.isCurrent })
+		let needsSwitch = target.hasKnownSpace && !target.belongsToBackgroundSection && !target.isSticky && !skyLight.spaces().contains(where: { $0.id == target.spaceID && $0.isCurrent })
 		if needsSwitch {
 			skyLight.setCurrentSpace(displayUUID: target.displayUUID, spaceID: target.spaceID)
 		}
@@ -893,7 +894,9 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
    guard let self else { return }
    let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == target.pid
-   if frontmost && self.accessibility.focusedWindowID(pid: target.pid) == target.id {
+   let appVisible = NSRunningApplication(processIdentifier: target.pid)?.isHidden == false
+   let minimized = self.accessibility.isMinimized(target) == true
+   if frontmost && appVisible && !minimized && self.accessibility.focusedWindowID(pid: target.pid) == target.id {
     self.refresh()
     self.setStatus("已激活“\(target.ownerName)”中的窗口。")
     if hideAfter { self.window?.orderOut(nil); self.updateDockPresence() }
@@ -982,19 +985,21 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 			// a view with a nil table column, so the title lives in that view.
 			let color: NSColor = group.space.isCurrent ? .controlAccentColor : .labelColor
 			let count = group.windows.isEmpty ? "无窗口".localized : "\(group.windows.count) 个窗口"
-			let text = "\(group.space.isCurrent ? "● " : "") \(group.space.title)　\(count)"
+			let marker = group.space.isCurrent ? "● " : group.space.id == DesktopSpace.backgroundWindowsID ? "◐ " : ""
+			let text = "\(marker) \(group.space.title)　\(count)"
 			return labelCell(text: text, font: .systemFont(ofSize: 13, weight: .semibold), color: color)
 		}
 
 		guard let window = item as? DesktopWindow else { return nil }
 		switch column {
 		case "app":
-			let name = window.ownerName + (window.isSticky ? "（所有桌面）".localized : "")
+			let state = window.backgroundStateDescription
+			let name = window.ownerName + (window.isSticky ? "（所有桌面）".localized : "") + (state.isEmpty ? "" : " · " + state)
 			return appCell(window: window, text: name)
 		case "window":
 			return labelCell(text: window.displayTitle, font: .systemFont(ofSize: 12), color: .labelColor)
 		case "desktop":
-			let title = spaceTitle(for: window.spaceID)
+			let title = window.hasKnownSpace ? spaceTitle(for: window.spaceID) : window.belongsToBackgroundSection ? "隐藏或最小化".localized : "未知桌面".localized
 			let suffix = window.isSticky ? " · 所有桌面".localized : ""
 			return labelCell(text: title + suffix, font: .systemFont(ofSize: 12), color: .secondaryLabelColor)
 		default:
