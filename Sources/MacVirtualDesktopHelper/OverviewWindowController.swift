@@ -423,8 +423,9 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 		focusButton.isEnabled = window != nil && !bulkRunning
 		closeButton.isEnabled = window != nil && !bulkRunning
 		moveButton.isEnabled = !bulkRunning && window != nil && window?.isSticky == false && (snapshot?.spaces.count ?? 0) > 1
-  cleanupButton.title = "一键清理 (".localized + String(uniqueWindows.filter { !isCleanupLocked($0) }.count) + ")"
-  cleanupButton.contentTintColor = uniqueWindows.contains(where: { !isCleanupLocked($0) }) ? NSColor(srgbRed: 178.0 / 255, green: 34.0 / 255, blue: 34.0 / 255, alpha: 1) : .controlTextColor
+		let cleanupWindows = uniqueWindows.filter { !$0.belongsToBackgroundSection }
+		cleanupButton.title = "一键清理 (".localized + String(cleanupWindows.filter { !isCleanupLocked($0) }.count) + ")"
+		cleanupButton.contentTintColor = cleanupWindows.contains(where: { !isCleanupLocked($0) }) ? NSColor(srgbRed: 178.0 / 255, green: 34.0 / 255, blue: 34.0 / 255, alpha: 1) : .controlTextColor
   cleanupButton.attributedTitle = NSAttributedString(string: cleanupButton.title, attributes: [.foregroundColor: cleanupButton.contentTintColor ?? NSColor.controlTextColor, .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)])
   cleanupButton.isEnabled = ruleStore != nil && !bulkRunning
   lockAllButton.isEnabled = ruleStore != nil && !bulkRunning
@@ -631,7 +632,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    setStatus("请先授予辅助功能及窗口标题读取权限。".localized, isError: true); return
   }
   snapshot = catalog.snapshot()
-  let candidates = uniqueWindows.filter { !isCleanupLocked($0) }
+		let candidates = uniqueWindows.filter { !$0.belongsToBackgroundSection && !isCleanupLocked($0) }
   guard !candidates.isEmpty else { setStatus("所有桌面均无未保护窗口。".localized); return }
   guard let reviewed = windowReview.confirm(title: "一键清理".localized, windows: candidates, action: "确认清理".localized) else { return }
   bulkRunning = true
@@ -802,6 +803,10 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard !bulkRunning, !loading else { return }
 		guard let window = selectedWindow else {
 			setStatus("请先选择一个窗口。".localized, isError: true)
+			return
+		}
+		if window.isAccessibilityUnavailable {
+			setStatus("该后台窗口未提供辅助功能接口，无法激活；请从应用自身菜单或图标打开。".localized, isError: true)
 			return
 		}
 		guard !window.isSticky, window.hasKnownSpace else {

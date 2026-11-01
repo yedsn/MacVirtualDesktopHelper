@@ -112,7 +112,7 @@ enum Localization {
   "时间": "Time", "显示方式": "Display mode", "更新 → ": "Updated → ",
   "更新桌面规则": "Update Desktop Rules", "更新锁定规则": "Update Cleanup Rules",
   "未知归属": "Unknown ownership", "未知桌面": "Unknown desktop",
-  "隐藏或最小化": "Hidden or minimized", "已最小化": "Minimized", "应用已隐藏": "Application hidden",
+  "隐藏或最小化": "Hidden or minimized", "已最小化": "Minimized", "应用已隐藏": "Application hidden", "后台窗口": "Background window",
   "未能切换到目标桌面，请重试。": "Could not switch to the target desktop. Try again.",
   "本次处理 ": "Processed this run: ", "查看": "View", "查看日志…": "View Log…",
   "标题使用正则表达式": "Use a regular expression for the title", "桌面": "Desktop", "桌面 ": "Desktop ",
@@ -216,7 +216,7 @@ enum Localization {
   "（所有桌面）": " (All Desktops)", "（无标题窗口）": "(Untitled Window)",
   "：按键无效或重复": ": invalid or duplicate key", "：注册冲突或系统拒绝（": ": registration conflict or system rejection (",
   "关闭请求失败（AX 错误 ": "Close request failed (AX error ",
-  "窗口激活失败（AX 错误 ": "Window activation failed (AX error "
+  "窗口激活失败（AX 错误 ": "Window activation failed (AX error ", "该后台窗口未提供辅助功能接口，无法激活；请从应用自身菜单或图标打开。": "This background window does not expose an Accessibility interface and cannot be activated here; open it from the app's own menu or icon."
  ]
 }
 

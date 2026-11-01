@@ -91,6 +91,7 @@ final class WindowCatalog {
 				)
 				window.isMinimized = minimizedWindowIDs(for: pid)?.contains(windowID) ?? false
 				window.isApplicationHidden = app?.isHidden ?? false
+				window.isAccessibilityUnavailable = !accessibility.containsWindow(window)
 				for memberSpaceID in associatedSpaceIDs {
 					windowsBySpace[memberSpaceID, default: []].append(window)
 				}

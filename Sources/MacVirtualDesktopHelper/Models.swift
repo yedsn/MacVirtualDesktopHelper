@@ -41,15 +41,18 @@ struct DesktopWindow: Identifiable {
 	let icon: NSImage?
 	var isMinimized = false
 	var isApplicationHidden = false
+	/// The window is present in CoreGraphics but its owning app does not expose
+	/// an Accessibility window object (common for menu-bar/background apps).
+	var isAccessibilityUnavailable = false
 
 	var displayTitle: String {
 		let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
 		return trimmed.isEmpty ? "（无标题窗口）".localized : trimmed
 	}
  var hasKnownSpace: Bool { spaceID != 0 }
-	var belongsToBackgroundSection: Bool { isMinimized || isApplicationHidden }
+	var belongsToBackgroundSection: Bool { isMinimized || isApplicationHidden || isAccessibilityUnavailable }
 	var backgroundStateDescription: String {
-		[isMinimized ? "已最小化".localized : nil, isApplicationHidden ? "应用已隐藏".localized : nil]
+		[isMinimized ? "已最小化".localized : nil, isApplicationHidden ? "应用已隐藏".localized : nil, isAccessibilityUnavailable ? "后台窗口".localized : nil]
 			.compactMap { $0 }.joined(separator: " · ")
 	}
  func cleanupCandidate(in windows: [DesktopWindow], isProtected: (DesktopWindow) -> Bool) -> DesktopWindow? {

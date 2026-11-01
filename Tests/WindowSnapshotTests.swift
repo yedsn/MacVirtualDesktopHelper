@@ -89,6 +89,11 @@ import AppKit
  mixed.isMinimized = true
  mixed.isApplicationHidden = true
  precondition(mixed.backgroundStateDescription == "已最小化 · 应用已隐藏")
+ var backgroundOnly = visible
+ backgroundOnly.isAccessibilityUnavailable = true
+ precondition(backgroundOnly.belongsToBackgroundSection)
+ precondition(backgroundOnly.backgroundStateDescription == "后台窗口")
+ precondition(![backgroundOnly].filter { !$0.belongsToBackgroundSection }.contains(where: { _ in true }))
  let unchanged = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible])])
  precondition(unchanged.count == 1 && unchanged[0].space.id == first.id && unchanged[0].windows.map(\.id) == [81])
  print("PASS: minimized and hidden windows move to one deduplicated trailing card while normal cards stay in place")
