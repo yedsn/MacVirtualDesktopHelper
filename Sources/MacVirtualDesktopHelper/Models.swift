@@ -93,6 +93,6 @@ struct WindowSnapshot {
 			}
 			return $0.displayTitle.localizedCaseInsensitiveCompare($1.displayTitle) == .orderedAscending
 		}
-		return [WindowGroup(space: .backgroundWindowsSpace, windows: windows)] + regular
+		return regular + [WindowGroup(space: .backgroundWindowsSpace, windows: windows)]
 	}
 }

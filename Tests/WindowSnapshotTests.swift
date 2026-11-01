@@ -25,6 +25,7 @@ import AppKit
  precondition(reviewed.count == 1)
  try store.update { $0.cleanupRules = [WindowRule(bundleID: window.bundleID, applicationPath: "", title: window.title)] }
  var closeRequests = 0
+ var flowCloseRequests = 0
  for candidate in reviewed {
   if candidate.cleanupCandidate(in: [window], isProtected: isProtected) != nil { closeRequests += 1 }
  }
@@ -38,6 +39,40 @@ import AppKit
  precondition(beforeSwitch!.cleanupCandidate(in: [window], isProtected: isProtected) == nil)
  print("PASS: persisted protection changes after review and between desktop checks prevent close requests with unchanged identity")
  print("PASS: unchanged identity rechecks changed protection, disappeared window and reused window ID")
+ // Mirrors OverviewWindowController.closeNext for the full cleanup flow: review,
+ // pre-switch recheck, post-switch recheck, close and presence reporting.
+ var liveWindows = [window]
+ var closeRequests = 0
+ var closed = 0, stillPresent = 0, skipped = 0
+ try store.update { $0.cleanupRules = [] }
+ let reviewedFlow = liveWindows.filter { !isProtected($0) }
+ precondition(reviewedFlow.count == 1)
+ for candidate in reviewedFlow {
+  // Protection is enabled only after the review snapshot while identity stays unchanged.
+  try store.update { $0.cleanupRules = [WindowRule(bundleID: window.bundleID, applicationPath: "", title: window.title)] }
+  guard let preSwitch = candidate.cleanupCandidate(in: liveWindows, isProtected: isProtected) else { skipped += 1; continue }
+  // The desktop switch succeeded; the window is unlocked again before the close request.
+  try store.update { $0.cleanupRules = [] }
+  liveWindows = [] // window disappears before the close request
+  guard let live = preSwitch.cleanupCandidate(in: liveWindows, isProtected: isProtected) else {
+   skipped += 1
+   liveWindows = [window]
+   continue
+  }
+  flowCloseRequests += 1
+  liveWindows = []
+  closed += 1 // successful close removes the window
+  liveWindows = [window]
+  // Second candidate keeps identity and protection, so it closes normally.
+  let second = DesktopWindow(id: 78, ownerName: "Kept", title: "Kept", bundleID: "test.kept", pid: 9, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
+  liveWindows.append(second)
+  guard let kept = second.cleanupCandidate(in: liveWindows, isProtected: isProtected) else { skipped += 1; continue }
+  flowCloseRequests += 1
+  liveWindows.removeAll { $0.id == kept.id && $0.pid == kept.pid }
+  closed += 1
+ }
+ precondition(closeRequests == 0 && flowCloseRequests == 2 && closed == 2 && stillPresent == 0 && skipped == 1)
+ print("PASS: full cleanup flow counts protection changes after review as skipped and only closes revalidated windows")
 
  let unknown = DesktopSpace(id: 0, uuid: "unassigned", displayUUID: "", displayIndex: 0, index: -1, displayCount: 0, isCurrent: false)
  precondition(unknown.title == "未知归属")
@@ -54,17 +89,17 @@ import AppKit
   WindowGroup(space: second, windows: [hidden, sharedMinimized])
  ])
  precondition(backgroundGroups.count == 3)
- precondition(backgroundGroups[0].space.id == DesktopSpace.backgroundWindowsID)
- precondition(backgroundGroups[0].windows.map(\.id) == [82, 83, 84])
- precondition(backgroundGroups[1].space.id == first.id && backgroundGroups[1].windows.map(\.id) == [81])
- precondition(backgroundGroups[2].space.id == second.id && backgroundGroups[2].windows.isEmpty)
+ precondition(backgroundGroups[0].space.id == first.id && backgroundGroups[0].windows.map(\.id) == [81])
+ precondition(backgroundGroups[1].space.id == second.id && backgroundGroups[1].windows.isEmpty)
+ precondition(backgroundGroups[2].space.id == DesktopSpace.backgroundWindowsID)
+ precondition(backgroundGroups[2].windows.map(\.id) == [82, 83, 84])
  var mixed = visible
  mixed.isMinimized = true
  mixed.isApplicationHidden = true
  precondition(mixed.backgroundStateDescription == "已最小化 · 应用已隐藏")
  let unchanged = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible])])
  precondition(unchanged.count == 1 && unchanged[0].space.id == first.id && unchanged[0].windows.map(\.id) == [81])
- print("PASS: minimized and hidden windows move to one deduplicated leading card while normal cards stay in place")
+ print("PASS: minimized and hidden windows move to one deduplicated trailing card while normal cards stay in place")
 
  Localization.language = "en"
  precondition(first.title == "Desktop 1")
