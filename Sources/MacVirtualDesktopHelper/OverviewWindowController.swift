@@ -451,7 +451,8 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 
  private var ruleWindows: [RuleWindowIdentity] {
   uniqueWindows.compactMap { item in
-   guard !item.isSticky, let space = snapshot?.spaces.first(where: { $0.id == item.spaceID }) else { return nil }
+			guard !item.isSticky, !item.belongsToBackgroundSection,
+				let space = snapshot?.spaces.first(where: { $0.id == item.spaceID }) else { return nil }
    return RuleWindowIdentity(id: item.id, bundleID: item.bundleID, applicationPath: NSRunningApplication(processIdentifier: item.pid)?.bundleURL?.path ?? "", title: item.title, spaceUUID: space.uuid, displayUUID: space.displayUUID, desktopIndex: space.index)
   }
  }
