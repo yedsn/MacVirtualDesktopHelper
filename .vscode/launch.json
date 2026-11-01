@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "dev",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./run.sh --show-overview",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "build",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./build.sh",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "test",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./Tests/run.sh",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
