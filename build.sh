@@ -6,12 +6,14 @@ BUILD_DIR="$SCRIPT_DIR/.build"
 APP_DIR="$BUILD_DIR/MacVirtualDesktopHelper.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
+RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
 mkdir -p "$MACOS_DIR"
 cp "$SCRIPT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
-mkdir -p "$CONTENTS_DIR/Resources"
-cp "$SCRIPT_DIR/LICENSE.md" "$CONTENTS_DIR/Resources/LICENSE.md"
-cp "$SCRIPT_DIR/Native/YABAI-LICENSE.txt" "$CONTENTS_DIR/Resources/YABAI-LICENSE.txt"
+mkdir -p "$RESOURCES_DIR"
+cp "$SCRIPT_DIR/LICENSE.md" "$RESOURCES_DIR/LICENSE.md"
+cp "$SCRIPT_DIR/Native/YABAI-LICENSE.txt" "$RESOURCES_DIR/YABAI-LICENSE.txt"
+cp "$SCRIPT_DIR/Resources/Icons/MacVirtualDesktopHelper.icns" "$RESOURCES_DIR/MacVirtualDesktopHelper.icns"
 
 if xcrun -f swiftc >/dev/null 2>&1; then
 	SWIFTC=(xcrun swiftc)
