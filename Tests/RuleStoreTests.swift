@@ -6,6 +6,161 @@ import Foundation
   defer { try? FileManager.default.removeItem(at: directory) }
   let url = directory.appendingPathComponent("state.json")
   let store = try RuleStore(url: url)
+  try store.update { state in
+   var settings = ApplicationSettings()
+   settings.showNavigationArrows = false
+   settings.previousDesktopSymbol = "←"
+   settings.nextDesktopSymbol = "→"
+   settings.disabledIconOpacity = 0.6
+   state.settings = settings
+  }
+  let navigationData = try Data(contentsOf: url)
+  let navigationReload = try RuleStore(url: url)
+  precondition(navigationReload.state.settings?.showNavigationArrows == false)
+  precondition(navigationReload.state.settings?.previousDesktopSymbol == "←")
+  precondition(navigationReload.state.settings?.nextDesktopSymbol == "→")
+  precondition(navigationReload.state.settings?.disabledIconOpacity == 0.6)
+  for invalidSymbol in ["", " ", String(UnicodeScalar(10)!), "abcde"] {
+   do {
+    try store.update { $0.settings?.previousDesktopSymbol = invalidSymbol }
+    fatalError("Invalid navigation symbol accepted")
+   } catch {}
+   let unchanged = try Data(contentsOf: url)
+   precondition(unchanged == navigationData)
+   precondition(store.state.settings?.previousDesktopSymbol == "←")
+  }
+  for invalidOpacity in [-0.1, 1.1, Double.infinity, Double.nan] {
+   do {
+    try store.update { $0.settings?.disabledIconOpacity = invalidOpacity }
+    fatalError("Invalid disabled opacity accepted")
+   } catch {}
+   let unchanged = try Data(contentsOf: url)
+   precondition(unchanged == navigationData)
+   precondition(store.state.settings?.disabledIconOpacity == 0.6)
+  }
+  let navigationBackupURL = directory.appendingPathComponent("navigation-backup.json")
+  try ConfigurationBackupService.export(store: store, to: navigationBackupURL)
+  let navigationBackup = try ConfigurationBackupService.preview(from: navigationBackupURL)
+  let navigationDestination = try RuleStore(url: directory.appendingPathComponent("navigation-destination.json"))
+  try ConfigurationBackupService.restore(navigationBackup, store: navigationDestination)
+  precondition(navigationDestination.state.settings?.previousDesktopSymbol == "←")
+  precondition(navigationDestination.state.settings?.nextDesktopSymbol == "→")
+  precondition(navigationDestination.state.settings?.disabledIconOpacity == 0.6)
+  precondition(navigationDestination.state.settings?.showNavigationArrows == false)
+  try store.update { $0.settings = nil }
+  print("PASS: navigation settings persistence, backup round-trip and invalid-value atomic rollback")
+  try store.update { state in
+   state.settings = ApplicationSettings()
+   state.settings?.showStartupOverlay = false
+   state.settings?.startupOverlayText = "Startup verification"
+   state.settings?.startupOverlayDuration = 3
+  }
+  let startupBaseline = try Data(contentsOf: url)
+  for invalidDuration in [0, -1, 61, Double.infinity, Double.nan] {
+   do {
+    try store.update { $0.settings?.startupOverlayDuration = invalidDuration }
+    fatalError("Invalid startup duration accepted")
+   } catch {}
+   let unchanged = try Data(contentsOf: url)
+   precondition(unchanged == startupBaseline)
+   precondition(store.state.settings?.startupOverlayDuration == 3)
+  }
+  for invalidText in ["", " ", String(repeating: "x", count: 201)] {
+   do {
+    try store.update { $0.settings?.startupOverlayText = invalidText }
+    fatalError("Invalid startup text accepted")
+   } catch {}
+   let unchanged = try Data(contentsOf: url)
+   precondition(unchanged == startupBaseline)
+   precondition(store.state.settings?.startupOverlayText == "Startup verification")
+  }
+  let startupBackupURL = directory.appendingPathComponent("startup-backup.json")
+  try ConfigurationBackupService.export(store: store, to: startupBackupURL)
+  let startupBackup = try ConfigurationBackupService.preview(from: startupBackupURL)
+  try ConfigurationBackupService.restore(startupBackup, store: navigationDestination)
+  let restoredStartup = try RuleStore(url: directory.appendingPathComponent("navigation-destination.json"))
+  precondition(restoredStartup.state.settings?.showStartupOverlay == false)
+  precondition(restoredStartup.state.settings?.startupOverlayText == "Startup verification")
+  precondition(restoredStartup.state.settings?.startupOverlayDuration == 3)
+  try store.update { $0.settings = nil }
+  print("PASS: startup settings backup round-trip and invalid text/duration atomic rollback")
+  try store.update { state in
+   state.settings = ApplicationSettings()
+   var overlay = OverlaySettings()
+   overlay.switchWidth = 600; overlay.switchHeight = 220
+   overlay.switchFontName = "Helvetica"; overlay.switchFontSize = 32
+   overlay.statusWidth = 300; overlay.statusHeight = 50
+   overlay.statusFontName = "Helvetica"; overlay.statusFontSize = 16
+   overlay.statusOffset = -30
+   overlay.switchForeground = "#112233"; overlay.switchBackground = "#445566"
+   overlay.statusForeground = "#778899"; overlay.statusBackground = "#AABBCC"
+   state.settings?.overlay = overlay
+  }
+  let overlayBaseline = try Data(contentsOf: url)
+  let invalidOverlayMutations: [(inout OverlaySettings) -> Void] = [
+   { $0.switchWidth = 23 }, { $0.statusHeight = 2001 },
+   { $0.switchHeight = .infinity }, { $0.statusWidth = .nan },
+   { $0.switchFontSize = 7 }, { $0.statusFontSize = 121 },
+   { $0.statusOffset = -1001 }, { $0.switchFontName = " " },
+   { $0.statusFontName = String(repeating: "x", count: 201) },
+   { $0.switchForeground = "red" }, { $0.switchBackground = "#12345Z" },
+   { $0.statusForeground = "#123" }, { $0.statusBackground = "112233" }
+  ]
+  for mutate in invalidOverlayMutations {
+   do {
+    try store.update { state in
+     var overlay = state.settings!.overlay!
+     mutate(&overlay); state.settings?.overlay = overlay
+    }
+    fatalError("Invalid overlay appearance accepted")
+   } catch {}
+   let unchanged = try Data(contentsOf: url)
+   precondition(unchanged == overlayBaseline)
+   precondition(store.state.settings?.overlay?.switchForeground == "#112233")
+  }
+  let appearanceBackupURL = directory.appendingPathComponent("appearance-backup.json")
+  try ConfigurationBackupService.export(store: store, to: appearanceBackupURL)
+  let appearanceBackup = try ConfigurationBackupService.preview(from: appearanceBackupURL)
+  try ConfigurationBackupService.restore(appearanceBackup, store: navigationDestination)
+  let appearanceReload = try RuleStore(url: directory.appendingPathComponent("navigation-destination.json"))
+  let appearanceEncoder = JSONEncoder(); appearanceEncoder.outputFormatting = .sortedKeys
+  let originalAppearance = try appearanceEncoder.encode(store.state.settings!.overlay!)
+  let restoredAppearance = try appearanceEncoder.encode(appearanceReload.state.settings!.overlay!)
+  precondition(originalAppearance == restoredAppearance)
+  try store.update { $0.settings = nil }
+  print("PASS: all overlay appearance fields backup/reload and invalid-value atomic rollback")
+  var legacyPalette = ApplicationSettings()
+  legacyPalette.menuForeground = "#123456"
+  legacyPalette.menuSymbolForeground = "#654321"
+  legacyPalette.menuBackground = "#ABCDEF"
+  precondition(legacyPalette.menuColors(dark: false).foreground == "#123456")
+  precondition(legacyPalette.menuColors(dark: true).background == "#ABCDEF")
+  legacyPalette.lightMenuColors = MenuColors()
+  precondition(legacyPalette.menuColors(dark: false).foreground == nil)
+  precondition(legacyPalette.menuColors(dark: false).background == nil)
+  precondition(legacyPalette.menuColors(dark: true).foreground == "#123456")
+  legacyPalette.darkMenuColors = MenuColors(foreground: "#FF0000", symbolForeground: "#00FF00", background: "#0000FF")
+  try store.update { $0.settings = legacyPalette }
+  let paletteBaseline = try Data(contentsOf: url)
+  do {
+   try store.update { $0.settings?.darkMenuColors?.foreground = "invalid" }
+   fatalError("Invalid themed color accepted")
+  } catch {}
+  let paletteUnchanged = try Data(contentsOf: url)
+  precondition(paletteUnchanged == paletteBaseline)
+  precondition(store.state.settings?.darkMenuColors?.foreground == "#FF0000")
+  let paletteBackupURL = directory.appendingPathComponent("palette-backup.json")
+  try ConfigurationBackupService.export(store: store, to: paletteBackupURL)
+  let paletteBackup = try ConfigurationBackupService.preview(from: paletteBackupURL)
+  try ConfigurationBackupService.restore(paletteBackup, store: navigationDestination)
+  let paletteReload = try RuleStore(url: directory.appendingPathComponent("navigation-destination.json"))
+  precondition(paletteReload.state.settings?.menuColors(dark: false).foreground == nil)
+  precondition(paletteReload.state.settings?.menuColors(dark: true).foreground == "#FF0000")
+  precondition(paletteReload.state.settings?.menuColors(dark: true).symbolForeground == "#00FF00")
+  precondition(paletteReload.state.settings?.menuColors(dark: true).background == "#0000FF")
+  precondition(paletteReload.state.settings?.menuForeground == "#123456")
+  try store.update { $0.settings = nil }
+  print("PASS: themed palette legacy fallback, explicit system colors, backup and atomic invalid-color rejection")
   let exact = WindowRule(bundleID: "test.app", applicationPath: "/Applications/Test.app", title: "Document A")
   try store.update { $0.cleanupRules = [exact] }
   let loaded = try RuleStore(url: url)

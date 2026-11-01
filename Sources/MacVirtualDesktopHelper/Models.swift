@@ -12,9 +12,9 @@ struct DesktopSpace: Identifiable {
 	var title: String {
   if id == 0 { return "未知归属".localized }
 		if displayCount > 1 {
-			return "显示器 \(displayIndex + 1) · 桌面 \(index + 1)"
+   return Localization.format("显示器 %d · 桌面 %d", displayIndex + 1, index + 1)
 		}
-		return "桌面 \(index + 1)"
+  return Localization.format("桌面 %d", index + 1)
 	}
 
 	var shortTitle: String {
@@ -39,6 +39,11 @@ struct DesktopWindow: Identifiable {
 		return trimmed.isEmpty ? "（无标题窗口）".localized : trimmed
 	}
  var hasKnownSpace: Bool { spaceID != 0 }
+ func cleanupCandidate(in windows: [DesktopWindow], isProtected: (DesktopWindow) -> Bool) -> DesktopWindow? {
+  guard let live = windows.first(where: { $0.id == id && $0.pid == pid && $0.bundleID == bundleID && $0.title == title }),
+   live.hasKnownSpace, !isProtected(live) else { return nil }
+  return live
+ }
 }
 
 struct WindowGroup {

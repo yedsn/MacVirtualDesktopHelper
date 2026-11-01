@@ -35,6 +35,11 @@ struct CompactStatusViewTests {
   precondition(manager == 2 && selected.count == 4)
   click(48)
   precondition(selected.last == 4)
+  view.showNavigationArrows = false
+  precondition(view.requiredWidth == 96)
+  click(48)
+  click(78)
+  precondition(manager == 4 && selected.last == 4)
   view.navigation = false
   view.clickScreenLocation = { window.convertPoint(toScreen: NSPoint(x: 168, y: 12)) }
   click(101) // Synthetic status-item center must not select the middle cell.

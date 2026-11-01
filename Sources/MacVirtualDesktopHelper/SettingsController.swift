@@ -25,7 +25,14 @@ final class SettingsController: NSWindowController {
  private let manager = NSPopUpButton()
  private let login = NSButton(checkboxWithTitle: "登录时启动".localized, target: nil, action: nil)
  private let loginStatus = NSTextField(labelWithString: "")
+ private let previousSymbol = NSTextField(string: "‹")
+ private let nextSymbol = NSTextField(string: "›")
+ private let disabledOpacity = NSTextField(string: "0.35")
+ private let navigationArrows = NSButton(checkboxWithTitle: "显示前后导航箭头".localized, target: nil, action: nil)
  private let hideBounds = NSButton(checkboxWithTitle: "在首尾桌面隐藏不可用的导航按钮".localized, target: nil, action: nil)
+ private let startupOverlay = NSButton(checkboxWithTitle: "启动时显示提示".localized, target: nil, action: nil)
+ private let startupText = NSTextField(string: "MacVirtualDesktopHelper")
+ private let startupDuration = NSTextField(string: "2")
  private let restoreFocus = NSButton(checkboxWithTitle: "切换后恢复目标桌面上次窗口焦点".localized, target: nil, action: nil)
  private let dockIcon = NSButton(checkboxWithTitle: "主窗口打开时在 Dock 显示图标".localized, target: nil, action: nil)
  private let glass = NSButton(checkboxWithTitle: "启用主窗口毛玻璃背景".localized, target: nil, action: nil)
@@ -72,8 +79,8 @@ final class SettingsController: NSWindowController {
   }
   let stack = NSStackView(views: [
    section("窗口与外观".localized, [row("语言（重启后生效）".localized, language), row("主题".localized, theme), row("概览文字大小".localized, overviewSize), dockIcon, glass]),
-   section("菜单栏".localized, [row("显示方式".localized, mode), row("间距（0–24 点）".localized, iconSpacing), appearance, nameInitial, hideBounds]),
-   section("操作与启动".localized, [row("窗口管理器".localized, manager), restoreFocus, NSStackView(views: [hotkeys, overlay]), login, loginStatus]),
+   section("菜单栏".localized, [row("显示方式".localized, mode), row("间距（0–24 点）".localized, iconSpacing), appearance, nameInitial, navigationArrows, row("向前符号".localized, previousSymbol), row("向后符号".localized, nextSymbol), row("禁用透明度（0–1）".localized, disabledOpacity), hideBounds]),
+   section("操作与启动".localized, [row("窗口管理器".localized, manager), restoreFocus, startupOverlay, row("启动提示文字".localized, startupText), row("提示时长（秒）".localized, startupDuration), NSStackView(views: [hotkeys, overlay, NSButton(title: "浮层外观…".localized, target: self, action: #selector(editOverlayAppearance))]), login, loginStatus]),
    section("配置与规则".localized, [backupActions])
   ])
   stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 24
@@ -99,23 +106,25 @@ final class SettingsController: NSWindowController {
  @objc private func exportSettings() { exportConfiguration?() }
  @objc private func importSettings() { importConfiguration?() }
  @objc private func editMenuAppearance() {
+  let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+  let palette = (store.state.settings ?? ApplicationSettings()).menuColors(dark: dark)
   let foreground = NSColorWell()
   let symbols = NSColorWell()
-  symbols.color = CompactStatusView.color(store.state.settings?.menuSymbolForeground) ?? CompactStatusView.color(store.state.settings?.menuForeground) ?? .white
+  symbols.color = CompactStatusView.color(palette.symbolForeground) ?? CompactStatusView.color(palette.foreground) ?? .white
   symbols.setAccessibilityLabel("管理器与导航符号颜色".localized)
   let sameSymbols = NSButton(checkboxWithTitle: "管理器与导航符号跟随桌面图标颜色".localized, target: nil, action: nil)
-  sameSymbols.state = store.state.settings?.menuSymbolForeground == nil ? .on : .off
+  sameSymbols.state = palette.symbolForeground == nil ? .on : .off
   let symbolAction = ColorSelectionAction { sameSymbols.state = .off }
   symbols.target = symbolAction; symbols.action = #selector(ColorSelectionAction.apply(_:))
   let background = NSColorWell()
-  foreground.color = CompactStatusView.color(store.state.settings?.menuForeground) ?? .white
-  background.color = CompactStatusView.color(store.state.settings?.menuBackground) ?? .darkGray
+  foreground.color = CompactStatusView.color(palette.foreground) ?? .white
+  background.color = CompactStatusView.color(palette.background) ?? .darkGray
   foreground.setAccessibilityLabel("图标与文字颜色".localized)
   background.setAccessibilityLabel("整体背景颜色".localized)
   let automatic = NSButton(checkboxWithTitle: "图标颜色跟随菜单栏".localized, target: nil, action: nil)
   let transparent = NSButton(checkboxWithTitle: "整体背景透明".localized, target: nil, action: nil)
-  automatic.state = store.state.settings?.menuForeground == nil ? .on : .off
-  transparent.state = store.state.settings?.menuBackground == nil ? .on : .off
+  automatic.state = palette.foreground == nil ? .on : .off
+  transparent.state = palette.background == nil ? .on : .off
   let foregroundAction = ColorSelectionAction { automatic.state = .off }
   let backgroundAction = ColorSelectionAction { transparent.state = .off }
   foreground.target = foregroundAction; foreground.action = #selector(ColorSelectionAction.apply(_:))
@@ -146,7 +155,7 @@ final class SettingsController: NSWindowController {
    well.widthAnchor.constraint(equalToConstant: 80).isActive = true
    well.heightAnchor.constraint(equalToConstant: 28).isActive = true
   }
-  let alert = NSAlert(); alert.messageText = "菜单栏图标外观".localized; alert.accessoryView = stack
+  let alert = NSAlert(); alert.messageText = "菜单栏图标外观".localized + " · " + (dark ? "深色".localized : "浅色".localized); alert.accessoryView = stack
   alert.addButton(withTitle: "保存".localized); alert.addButton(withTitle: "取消".localized)
   let response = withExtendedLifetime((foregroundAction, backgroundAction, symbolAction)) { alert.runModal() }
   foreground.deactivate(); background.deactivate(); symbols.deactivate()
@@ -160,9 +169,8 @@ final class SettingsController: NSWindowController {
   do {
    try store.update { state in
     var settings = state.settings ?? ApplicationSettings()
-    settings.menuForeground = automatic.state == .on ? nil : colorHex(foreground.color)
-    settings.menuSymbolForeground = sameSymbols.state == .on ? nil : colorHex(symbols.color)
-    settings.menuBackground = transparent.state == .on ? nil : colorHex(background.color)
+    let colors = MenuColors(foreground: automatic.state == .on ? nil : colorHex(foreground.color), symbolForeground: sameSymbols.state == .on ? nil : colorHex(symbols.color), background: transparent.state == .on ? nil : colorHex(background.color))
+    if dark { settings.darkMenuColors = colors } else { settings.lightMenuColors = colors }
     settings.menuFontName = font.indexOfSelectedItem == 0 ? nil : font.titleOfSelectedItem
     settings.menuFontSize = fontSize
     state.settings = settings
@@ -180,7 +188,14 @@ final class SettingsController: NSWindowController {
   language.selectItem(at: settings.language == "en" ? 1 : 0)
   mode.selectItem(at: settings.desktopDisplayMode == "navigation" ? 1 : 0)
   manager.selectItem(at: settings.windowManager == "system" ? 1 : 0)
+  previousSymbol.stringValue = settings.previousDesktopSymbol ?? "‹"
+  nextSymbol.stringValue = settings.nextDesktopSymbol ?? "›"
+  disabledOpacity.stringValue = String(settings.disabledIconOpacity ?? 0.35)
+  navigationArrows.state = (settings.showNavigationArrows ?? true) ? .on : .off
   hideBounds.state = settings.hideNavigationAtBounds ? .on : .off
+  startupOverlay.state = (settings.showStartupOverlay ?? true) ? .on : .off
+  startupText.stringValue = settings.startupOverlayText ?? "MacVirtualDesktopHelper"
+  startupDuration.stringValue = String(settings.startupOverlayDuration ?? 2)
   restoreFocus.state = settings.restoreWindowFocus == true ? .on : .off
   iconSpacing.stringValue = String(settings.menuIconSpacing ?? 8)
   dockIcon.state = (settings.showDockIcon ?? true) ? .on : .off
@@ -212,6 +227,12 @@ final class SettingsController: NSWindowController {
   guard let spacing = Double(iconSpacing.stringValue), spacing.isFinite, (0...24).contains(spacing) else {
    let alert = NSAlert(); alert.messageText = "图标间距须为 0–24 点".localized; alert.runModal(); return
   }
+  guard let duration = Double(startupDuration.stringValue) else {
+   let alert = NSAlert(); alert.messageText = "启动提示时长须为 0.5–60 秒".localized; alert.runModal(); return
+  }
+  settings.showStartupOverlay = startupOverlay.state == .on
+  settings.startupOverlayText = startupText.stringValue
+  settings.startupOverlayDuration = duration
   settings.showDockIcon = dockIcon.state == .on
   settings.frostedWindow = glass.state == .on
   settings.showDesktopNameInitial = nameInitial.state == .on
@@ -221,6 +242,13 @@ final class SettingsController: NSWindowController {
   settings.language = language.indexOfSelectedItem == 1 ? "en" : "zh-CN"
   settings.desktopDisplayMode = mode.indexOfSelectedItem == 1 ? "navigation" : "all-desktops"
   settings.windowManager = manager.indexOfSelectedItem == 1 ? "system" : "built-in"
+  guard let opacity = Double(disabledOpacity.stringValue) else {
+   let alert = NSAlert(); alert.messageText = "禁用透明度须为 0–1".localized; alert.runModal(); return
+  }
+  settings.previousDesktopSymbol = previousSymbol.stringValue
+  settings.nextDesktopSymbol = nextSymbol.stringValue
+  settings.disabledIconOpacity = opacity
+  settings.showNavigationArrows = navigationArrows.state == .on
   settings.hideNavigationAtBounds = hideBounds.state == .on
   settings.restoreWindowFocus = restoreFocus.state == .on
   do { try store.update { $0.settings = settings }; changed?() } catch { NSAlert(error: error).runModal() }
@@ -273,6 +301,91 @@ final class SettingsController: NSWindowController {
   }
  }
  private func hotKeyError() -> NSError { NSError(domain: "HotKeys", code: 1, userInfo: [NSLocalizedDescriptionKey: "快捷键格式无效或按键重复，请按示例填写。".localized]) }
+ @objc private func editOverlayAppearance() {
+  let original = store.state.settings?.overlay ?? OverlaySettings()
+  let values: [(String, String)] = [
+   ("切换浮层宽度", String(original.switchWidth ?? 480)),
+   ("切换浮层高度", String(original.switchHeight ?? 180)),
+   ("切换浮层字体", original.switchFontName ?? ""),
+   ("切换浮层字号", String(original.switchFontSize ?? 30)),
+   ("状态浮层宽度", String(original.statusWidth ?? 250)),
+   ("状态浮层高度", String(original.statusHeight ?? 40)),
+   ("状态浮层字体", original.statusFontName ?? ""),
+   ("状态浮层字号", String(original.statusFontSize ?? 13)),
+   ("状态纵向偏移", String(original.statusOffset ?? 0))
+  ]
+  let fields = values.map { NSTextField(string: $0.1) }
+  let rows = zip(values, fields).map { value, field -> NSView in
+   let label = NSTextField(labelWithString: value.0.localized)
+   label.widthAnchor.constraint(equalToConstant: 150).isActive = true
+   field.widthAnchor.constraint(equalToConstant: 220).isActive = true
+   return NSStackView(views: [label, field])
+  }
+  let colorValues = [original.switchForeground, original.switchBackground, original.statusForeground, original.statusBackground]
+  let colorTitles = ["切换文字颜色", "切换背景颜色", "状态文字颜色", "状态背景颜色"]
+  let wells = colorValues.enumerated().map { index, value -> NSColorWell in
+   let well = NSColorWell()
+   well.color = CompactStatusView.color(value) ?? (index % 2 == 0 ? .labelColor : .windowBackgroundColor)
+   well.setAccessibilityLabel(colorTitles[index].localized)
+   well.widthAnchor.constraint(equalToConstant: 60).isActive = true
+   return well
+  }
+  let automaticColors = colorValues.map { value -> NSButton in
+   let button = NSButton(checkboxWithTitle: "使用系统颜色".localized, target: nil, action: nil)
+   button.state = value == nil ? .on : .off; return button
+  }
+  let colorActions = automaticColors.map { button in ColorSelectionAction { button.state = .off } }
+  for index in wells.indices { wells[index].target = colorActions[index]; wells[index].action = #selector(ColorSelectionAction.apply(_:)) }
+  let colorRows = wells.indices.map { index -> NSView in
+   let label = NSTextField(labelWithString: colorTitles[index].localized)
+   label.widthAnchor.constraint(equalToConstant: 150).isActive = true
+   return NSStackView(views: [label, wells[index], automaticColors[index]])
+  }
+  let colorPanel = NSColorPanel.shared
+  let previousModal = colorPanel.worksWhenModal
+  let previousAlpha = colorPanel.showsAlpha
+  colorPanel.worksWhenModal = true; colorPanel.showsAlpha = false
+  defer {
+   wells.forEach { $0.deactivate() }; colorPanel.orderOut(nil)
+   colorPanel.worksWhenModal = previousModal; colorPanel.showsAlpha = previousAlpha
+  }
+  let stack = NSStackView(views: rows + colorRows + [NSTextField(labelWithString: "字体留空使用系统字体；尺寸和偏移单位为点。".localized)])
+  stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 10
+  stack.frame = NSRect(x: 0, y: 0, width: 440, height: 490)
+  let alert = NSAlert(); alert.messageText = "浮层外观".localized; alert.accessoryView = stack
+  alert.addButton(withTitle: "保存".localized); alert.addButton(withTitle: "取消".localized)
+  while withExtendedLifetime(colorActions, { alert.runModal() }) == .alertFirstButtonReturn {
+   do {
+    let numbers = try [0, 1, 3, 4, 5, 7, 8].map { index -> Double in
+     guard let number = Double(fields[index].stringValue) else {
+      throw NSError(domain: "OverlayAppearance", code: 1, userInfo: [NSLocalizedDescriptionKey: "请输入有效数字。".localized])
+     }
+     return number
+    }
+    var overlay = original
+    overlay.switchForeground = automaticColors[0].state == .on ? nil : colorHex(wells[0].color)
+    overlay.switchBackground = automaticColors[1].state == .on ? nil : colorHex(wells[1].color)
+    overlay.statusForeground = automaticColors[2].state == .on ? nil : colorHex(wells[2].color)
+    overlay.statusBackground = automaticColors[3].state == .on ? nil : colorHex(wells[3].color)
+    overlay.switchWidth = numbers[0]; overlay.switchHeight = numbers[1]; overlay.switchFontSize = numbers[2]
+    overlay.statusWidth = numbers[3]; overlay.statusHeight = numbers[4]; overlay.statusFontSize = numbers[5]; overlay.statusOffset = numbers[6]
+    let switchFont = fields[2].stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    let statusFont = fields[6].stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    for font in [switchFont, statusFont] where !font.isEmpty {
+     guard NSFont(name: font, size: 13) != nil else {
+      throw NSError(domain: "OverlayAppearance", code: 2, userInfo: [NSLocalizedDescriptionKey: "浮层字体名称无效".localized])
+     }
+    }
+    overlay.switchFontName = switchFont.isEmpty ? nil : switchFont
+    overlay.statusFontName = statusFont.isEmpty ? nil : statusFont
+    try store.update { state in
+     var application = state.settings ?? ApplicationSettings()
+     application.overlay = overlay; state.settings = application
+    }
+    changed?(); return
+   } catch { NSAlert(error: error).runModal() }
+  }
+ }
  @objc private func editOverlay() {
   let settings = store.state.settings?.overlay ?? OverlaySettings()
   let showSwitch = NSButton(checkboxWithTitle: "切换桌面时显示提示".localized, target: nil, action: nil)
@@ -301,7 +414,14 @@ final class SettingsController: NSWindowController {
   do {
    try store.update { state in
     var application = state.settings ?? ApplicationSettings()
-    application.overlay = OverlaySettings(showSwitch: showSwitch.state == .on, showStatus: showStatus.state == .on, duration: seconds, position: OverlaySettings.positions[position.indexOfSelectedItem], allDisplays: allDisplays.state == .on, translucent: translucent.state == .on, animate: animate.state == .on)
+    application.overlay = settings
+    application.overlay?.showSwitch = showSwitch.state == .on
+    application.overlay?.showStatus = showStatus.state == .on
+    application.overlay?.duration = seconds
+    application.overlay?.position = OverlaySettings.positions[position.indexOfSelectedItem]
+    application.overlay?.allDisplays = allDisplays.state == .on
+    application.overlay?.translucent = translucent.state == .on
+    application.overlay?.animate = animate.state == .on
     application.overlay?.statusPosition = OverlaySettings.positions[statusPosition.indexOfSelectedItem]
     application.overlay?.statusAllDisplays = statusScreens.state == .on
     application.overlay?.statusTranslucent = statusTranslucent.state == .on

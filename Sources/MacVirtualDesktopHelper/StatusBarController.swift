@@ -88,11 +88,17 @@ final class StatusBarController: NSObject {
   compactView.spaces = spaces
   compactView.navigation = settings().desktopDisplayMode == "navigation"
   compactView.showNameInitial = settings().showDesktopNameInitial == true
+  compactView.previousSymbol = settings().previousDesktopSymbol ?? "‹"
+  compactView.nextSymbol = settings().nextDesktopSymbol ?? "›"
+  compactView.disabledOpacity = CGFloat(settings().disabledIconOpacity ?? 0.35)
+  compactView.showNavigationArrows = settings().showNavigationArrows ?? true
   compactView.hideNavigationAtBounds = settings().hideNavigationAtBounds
   compactView.iconSpacing = CGFloat(settings().menuIconSpacing ?? 8)
-  compactView.foreground = CompactStatusView.color(settings().menuForeground)
-  compactView.symbolForeground = CompactStatusView.color(settings().menuSymbolForeground)
-  compactView.background = CompactStatusView.color(settings().menuBackground)
+  let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+  let colors = settings().menuColors(dark: dark)
+  compactView.foreground = CompactStatusView.color(colors.foreground)
+  compactView.symbolForeground = CompactStatusView.color(colors.symbolForeground)
+  compactView.background = CompactStatusView.color(colors.background)
   compactView.fontName = settings().menuFontName
   compactView.fontSize = CGFloat(settings().menuFontSize ?? 11)
   compactItem.length = compactView.requiredWidth

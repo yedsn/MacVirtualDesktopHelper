@@ -72,7 +72,21 @@ struct RuleState: Codable {
  var settings: ApplicationSettings?
 }
 
+struct MenuColors: Codable {
+ var foreground: String?
+ var symbolForeground: String?
+ var background: String?
+}
+
 struct ApplicationSettings: Codable {
+ var lightMenuColors: MenuColors?
+ var darkMenuColors: MenuColors?
+ func menuColors(dark: Bool) -> MenuColors {
+  (dark ? darkMenuColors : lightMenuColors) ?? MenuColors(foreground: menuForeground, symbolForeground: menuSymbolForeground, background: menuBackground)
+ }
+ var showStartupOverlay: Bool?
+ var startupOverlayText: String?
+ var startupOverlayDuration: Double?
  var language: String?
  var theme = "auto"
  var desktopDisplayMode = "all-desktops"
@@ -90,6 +104,10 @@ struct ApplicationSettings: Codable {
  var showDockIcon: Bool?
  var overviewFontSize: Double?
  var frostedWindow: Bool?
+ var previousDesktopSymbol: String?
+ var nextDesktopSymbol: String?
+ var disabledIconOpacity: Double?
+ var showNavigationArrows: Bool?
  var showDesktopNameInitial: Bool?
 }
 
@@ -101,6 +119,19 @@ struct OverlaySettings: Codable {
  var allDisplays = true
  var translucent = true
  var animate = true
+ var switchForeground: String?
+ var switchBackground: String?
+ var statusForeground: String?
+ var statusBackground: String?
+ var switchWidth: Double?
+ var switchHeight: Double?
+ var switchFontName: String?
+ var switchFontSize: Double?
+ var statusWidth: Double?
+ var statusHeight: Double?
+ var statusFontName: String?
+ var statusFontSize: Double?
+ var statusOffset: Double?
  var statusPosition: String?
  var statusAllDisplays: Bool?
  var statusTranslucent: Bool?
@@ -127,15 +158,36 @@ final class RuleStore {
  static func validate(_ state: RuleState) throws {
   guard state.version == 1 else { throw validationError("不支持的规则文件版本") }
   if let settings = state.settings {
+   if let text = settings.startupOverlayText, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || text.count > 200 { throw validationError("启动提示文字须为 1–200 个字符") }
+   if let duration = settings.startupOverlayDuration, !duration.isFinite || !(0.5...60).contains(duration) { throw validationError("启动提示时长须为 0.5–60 秒") }
    guard settings.language == nil || ["zh-CN", "en"].contains(settings.language!) else { throw validationError("应用语言无效") }
    if let size = settings.overviewFontSize, !size.isFinite || !(11...20).contains(size) { throw validationError("概览字号须为 11–20 点") }
    if let size = settings.menuFontSize, !size.isFinite || !(8...16).contains(size) { throw validationError("菜单栏字号须为 8–16 点") }
    if let name = settings.menuFontName, name.isEmpty || name.count > 200 { throw validationError("菜单栏字体名称无效") }
-   for color in [settings.menuForeground, settings.menuSymbolForeground, settings.menuBackground].compactMap({ $0 }) {
+   let palettes = [settings.menuColors(dark: false), settings.menuColors(dark: true)]
+   let colors = palettes.flatMap { [$0.foreground, $0.symbolForeground, $0.background] } + [settings.menuForeground, settings.menuSymbolForeground, settings.menuBackground]
+   for color in colors.compactMap({ $0 }) {
     guard color.count == 7, color.first == "#", UInt32(color.dropFirst(), radix: 16) != nil else { throw validationError("颜色须为 #RRGGBB") }
    }
+   for symbol in [settings.previousDesktopSymbol, settings.nextDesktopSymbol].compactMap({ $0 }) {
+    guard !symbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, symbol.count <= 4, !symbol.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { throw validationError("导航符号须为 1–4 个可见字符") }
+   }
+   if let opacity = settings.disabledIconOpacity, !opacity.isFinite || !(0...1).contains(opacity) { throw validationError("禁用透明度须为 0–1") }
    if let spacing = settings.menuIconSpacing, !spacing.isFinite || !(0...24).contains(spacing) { throw validationError("菜单栏图标间距须为 0–24 点") }
    if let overlay = settings.overlay {
+    for color in [overlay.switchForeground, overlay.switchBackground, overlay.statusForeground, overlay.statusBackground].compactMap({ $0 }) {
+     guard color.count == 7, color.first == "#", UInt32(color.dropFirst(), radix: 16) != nil else { throw validationError("颜色须为 #RRGGBB") }
+    }
+    for dimension in [overlay.switchWidth, overlay.switchHeight, overlay.statusWidth, overlay.statusHeight].compactMap({ $0 }) {
+     guard dimension.isFinite, (24...2000).contains(dimension) else { throw validationError("浮层尺寸须为 24–2000 点") }
+    }
+    for size in [overlay.switchFontSize, overlay.statusFontSize].compactMap({ $0 }) {
+     guard size.isFinite, (8...120).contains(size) else { throw validationError("浮层字号须为 8–120 点") }
+    }
+    for name in [overlay.switchFontName, overlay.statusFontName].compactMap({ $0 }) {
+     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.count <= 200 else { throw validationError("浮层字体名称无效") }
+    }
+    if let offset = overlay.statusOffset, !offset.isFinite || !(-1000...1000).contains(offset) { throw validationError("浮层偏移须为 -1000–1000 点") }
     guard overlay.duration.isFinite, (0...60).contains(overlay.duration), (OverlaySettings.positions + ["center", "top", "bottom"]).contains(overlay.position), overlay.statusPosition == nil || OverlaySettings.positions.contains(overlay.statusPosition!) else { throw validationError("桌面浮层设置无效") }
    }
    guard ["auto", "light", "dark"].contains(settings.theme),

@@ -42,6 +42,9 @@ final class AccessibilityWindowService {
 		}
 
 		_ = app.activate(options: [.activateAllWindows])
+		let application = AXUIElementCreateApplication(target.pid)
+		AXUIElementSetMessagingTimeout(application, 1.5)
+		_ = AXUIElementSetAttributeValue(application, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
 		let result = AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
 		let focusResult = AXUIElementSetAttributeValue(axWindow, kAXFocusedAttribute as CFString, kCFBooleanTrue)
 		if result != .success && focusResult != .success {

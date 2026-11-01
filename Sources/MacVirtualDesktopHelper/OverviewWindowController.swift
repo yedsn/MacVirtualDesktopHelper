@@ -647,7 +647,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    return
   }
   setStatus("正在清理：已关闭 ".localized + String(closed) + " 个，等待响应 ".localized + String(remaining) + " 个，跳过或失败 ".localized + String(failed) + " 个，剩余 ".localized + String(candidates.count) + " 个…".localized)
-  guard let current = uniqueWindows.first(where: { $0.id == item.id && $0.pid == item.pid && $0.bundleID == item.bundleID && $0.title == item.title }), !isCleanupLocked(current) else {
+  guard let current = item.cleanupCandidate(in: uniqueWindows, isProtected: isCleanupLocked) else {
    DispatchQueue.main.async { [weak self] in self?.closeNext(Array(candidates.dropFirst()), closed: closed, remaining: remaining, failed: failed + 1) }; return
   }
   let needsSwitch = !current.isSticky && !skyLight.spaces().contains { $0.id == current.spaceID && $0.isCurrent }
@@ -657,8 +657,10 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   }) { [weak self] in
    guard let self else { return }
    self.snapshot = self.catalog.snapshot()
-   let unchanged = self.uniqueWindows.contains { $0.id == current.id && $0.pid == current.pid && $0.bundleID == current.bundleID && $0.title == current.title }
-   let error = !unchanged || self.isCleanupLocked(current) ? "窗口身份或保护状态已改变".localized : self.accessibility.close(current)
+   let live = current.cleanupCandidate(in: self.uniqueWindows, isProtected: self.isCleanupLocked)
+   let error: String?
+   if let live { error = self.accessibility.close(live) }
+   else { error = "窗口身份或保护状态已改变".localized }
    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
     guard let self else { return }
     self.snapshot = self.catalog.snapshot()

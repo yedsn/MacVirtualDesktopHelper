@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
    hotKeys.perform = { [weak self] action in self?.performHotKey(action) }
    reloadHotKeys()
    spaceChanged()
+   desktopOverlay.showStartup(settings: overview.applicationSettings)
 			statusBar.start()
    let timer = Timer(timeInterval: 0.75, repeats: true) { [weak self] _ in self?.rememberFocusedWindow() }
    timer.tolerance = 0.15
@@ -145,16 +146,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   if currentSpaceID == nil || !changed.isEmpty {
    if space.id != currentSpaceID { previousSpaceID = currentSpaceID; currentSpaceID = space.id }
   }
+  if overviewController?.applicationSettings.restoreWindowFocus == true, !changed.isEmpty {
+   ApplicationLog.write("Focus restore: changed=" + String(changed.count) + " remembered=" + String(lastWindows[space.id]?.id ?? 0))
+  }
   // Simultaneous changes do not identify a unique display whose focus should win.
   if changed.count == 1, overviewController?.applicationSettings.restoreWindowFocus == true, let target = lastWindows[space.id] {
    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-    guard let self, self.currentSpacesByDisplay[space.displayUUID] == space.id,
-     self.overviewController?.applicationSettings.restoreWindowFocus == true,
-     NSRunningApplication(processIdentifier: target.pid)?.bundleIdentifier == target.bundleID,
-     self.skyLight?.spaceIDs(for: target.id).contains(space.id) == true,
-     self.accessibility.containsWindow(target),
-     NSWorkspace.shared.frontmostApplication?.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
-    _ = self.accessibility.focus(target)
+    guard let self else { return }
+    let sameSpace = self.currentSpacesByDisplay[space.displayUUID] == space.id
+    let enabled = self.overviewController?.applicationSettings.restoreWindowFocus == true
+    let sameApp = NSRunningApplication(processIdentifier: target.pid)?.bundleIdentifier == target.bundleID
+    let membership = self.skyLight?.spaceIDs(for: target.id).contains(space.id) == true
+    let exists = self.accessibility.containsWindow(target)
+    let overviewActive = NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier
+    ApplicationLog.write("Focus checks: space=" + String(sameSpace) + " enabled=" + String(enabled) + " app=" + String(sameApp) + " membership=" + String(membership) + " exists=" + String(exists) + " overview=" + String(overviewActive))
+    guard sameSpace, enabled, sameApp, membership, exists, !overviewActive else { return }
+    let error = self.accessibility.focus(target)
+    ApplicationLog.write("Focus request: " + (error ?? "accepted"))
    }
   }
  }
@@ -166,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let associated = skyLight.spaceIDs(for: id)
   // Shared windows do not identify a unique desktop to restore.
   guard associated.count == 1, let space = skyLight.spaces().first(where: { $0.isCurrent && associated.contains($0.id) }) else { return }
+  if lastWindows[space.id]?.id != id { ApplicationLog.write("Focus remembered: space=" + String(space.id) + " window=" + String(id)) }
   lastWindows[space.id] = DesktopWindow(id: id, ownerName: app.localizedName ?? "", title: "", bundleID: app.bundleIdentifier ?? "", pid: app.processIdentifier, spaceID: space.id, displayUUID: space.displayUUID, isOnScreen: true, isSticky: false, icon: nil)
  }
  private func reloadHotKeys() {

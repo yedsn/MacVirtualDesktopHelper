@@ -14,6 +14,10 @@ final class CompactStatusView: NSView {
  var fontName: String?
  var fontSize: CGFloat = 11
  var navigation = false
+ var showNavigationArrows = true
+ var previousSymbol = "‹"
+ var nextSymbol = "›"
+ var disabledOpacity: CGFloat = 0.35
  var showNameInitial = false
  var hideNavigationAtBounds = false
  private enum Entry { case desktop(DesktopSpace), name(DesktopSpace), arrow(String, DesktopSpace?) }
@@ -24,10 +28,10 @@ final class CompactStatusView: NSView {
   let previous = current > 0 ? displaySpaces[current - 1] : nil
   let next = current + 1 < displaySpaces.count ? displaySpaces[current + 1] : nil
   var result: [Entry] = []
-  if previous != nil || !hideNavigationAtBounds { result.append(.arrow("‹", previous)) }
+  if showNavigationArrows && (previous != nil || !hideNavigationAtBounds) { result.append(.arrow(previousSymbol, previous)) }
   result.append(.desktop(displaySpaces[current]))
   if showNameInitial { result.append(.name(displaySpaces[current])) }
-  if next != nil || !hideNavigationAtBounds { result.append(.arrow("›", next)) }
+  if showNavigationArrows && (next != nil || !hideNavigationAtBounds) { result.append(.arrow(nextSymbol, next)) }
   return result
  }
  static func color(_ hex: String?) -> NSColor? {
@@ -53,7 +57,7 @@ final class CompactStatusView: NSView {
    case .arrow:
     if case let .arrow(symbol, target) = entry {
      let text = symbol as NSString
-     let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 22), .foregroundColor: target == nil ? symbolColor.withAlphaComponent(0.35) : symbolColor]
+     let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 22), .foregroundColor: target == nil ? symbolColor.withAlphaComponent(disabledOpacity) : symbolColor]
      let size = text.size(withAttributes: attributes)
      text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2), withAttributes: attributes)
     }
