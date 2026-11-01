@@ -5,7 +5,7 @@
       "name": "dev",
       "type": "node-terminal",
       "request": "launch",
-      "command": "./run.sh --show-overview",
+      "command": "./dev.sh",
       "cwd": "${workspaceFolder}"
     },
     {

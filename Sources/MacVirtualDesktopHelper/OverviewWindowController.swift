@@ -597,7 +597,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard let ruleStore else { setStatus("规则状态不可用，无法更新锁定规则。".localized, isError: true); return }
   guard CGPreflightScreenCaptureAccess() else { setStatus("请先授予屏幕录制权限，以读取标题并更新锁定规则。".localized, isError: true); return }
   snapshot = catalog.snapshot()
-  guard let windows = windowReview.confirm(title: "检查锁定规则".localized, windows: uniqueWindows.filter(\.hasKnownSpace), action: "更新锁定规则".localized) else { return }
+  guard let windows = windowReview.confirm(title: "检查锁定规则".localized, windows: uniqueWindows.filter { $0.hasKnownSpace && !$0.belongsToBackgroundSection }, action: "更新锁定规则".localized) else { return }
   snapshot = catalog.snapshot()
   let currentWindows = uniqueWindows
   let validWindows = windows.filter { preview in
