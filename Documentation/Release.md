@@ -20,10 +20,10 @@ scripts/release/release.sh
 ```sh
 ./scripts/release/release.sh 0.1.0          # 指定版本，只提交和打标签
 ./scripts/release/release.sh 0.1.0 --push  # 同时推送分支与标签，触发 Actions
-./scripts/release/release.sh                # 自动建议下一个补丁版本
+./scripts/release/release.sh                # 交互输入版本号，默认建议下一个补丁版本
 ```
 
-脚本会 `git add -A`，因此发布前请先提交或暂存与本次发布无关的改动。`Resources/Info.plist` 中的 `CFBundleShortVersionString` 写入版本号，`CFBundleVersion` 写入 `major*10000 + minor*100 + patch` 形式的递增构建号。
+从 VS Code 的 release 入口运行时，会先显示当前版本、询问发布版本号，再确认是否继续；输入 q 或在确认处回车可取消。未提供版本号的非交互调用会退出。脚本会 `git add -A`，因此发布前请先提交或暂存与本次发布无关的改动。`Resources/Info.plist` 中的 `CFBundleShortVersionString` 写入版本号，`CFBundleVersion` 写入 `major*10000 + minor*100 + patch` 形式的递增构建号。
 
 只想在本地产出安装包时：
 
