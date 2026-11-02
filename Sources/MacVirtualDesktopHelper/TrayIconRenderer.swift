@@ -29,4 +29,35 @@ enum TrayIconRenderer {
   image.isTemplate = false
   return image
  }
+
+ static func applicationIcon() -> NSImage {
+  let size = 512
+  guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
+    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+    colorSpaceName: .deviceRGB, bitmapFormat: [], bytesPerRow: size * 4, bitsPerPixel: 32),
+    let context = NSGraphicsContext(bitmapImageRep: rep) else { return NSImage() }
+  NSGraphicsContext.saveGraphicsState()
+  NSGraphicsContext.current = context
+  NSColor.clear.setFill()
+  NSRect(x: 0, y: 0, width: size, height: size).fill()
+  blue.withAlphaComponent(225.0 / 255).setFill()
+  let pane = CGFloat(size) * 0.94 / 2
+  let step = pane + CGFloat(size) * 0.06
+  for x in [0.0, step] { for y in [0.0, step] {
+   NSRect(x: x, y: y, width: pane, height: pane).fill()
+  }}
+  NSGraphicsContext.restoreGraphicsState()
+  let image = NSImage(size: NSSize(width: size, height: size))
+  image.addRepresentation(rep)
+  image.isTemplate = false
+  return image
+ }
+
+ /// Keeps the Dock entry stable: either the app always appears with its icon,
+ /// or it stays a menu-bar-only agent. Toggling the policy on every window
+ /// close makes macOS rebuild the Dock tile and briefly show a blank default.
+ static func applyDockPolicy(showDockIcon: Bool) {
+  NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
+  if showDockIcon { NSApp.applicationIconImage = applicationIcon() }
+ }
 }

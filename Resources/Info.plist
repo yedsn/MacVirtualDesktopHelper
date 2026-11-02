@@ -16,6 +16,12 @@
 	<string>MacVirtualDesktopHelper</string>
 	<key>CFBundleIconFile</key>
 	<string>MacVirtualDesktopHelper</string>
+	<key>CFBundleIconName</key>
+	<string>MacVirtualDesktopHelper</string>
+	<key>CFBundleIconFiles</key>
+	<array>
+		<string>MacVirtualDesktopHelper</string>
+	</array>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -24,8 +30,6 @@
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

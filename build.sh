@@ -14,6 +14,7 @@ mkdir -p "$RESOURCES_DIR"
 cp "$SCRIPT_DIR/LICENSE.md" "$RESOURCES_DIR/LICENSE.md"
 cp "$SCRIPT_DIR/Native/YABAI-LICENSE.txt" "$RESOURCES_DIR/YABAI-LICENSE.txt"
 cp "$SCRIPT_DIR/Resources/Icons/MacVirtualDesktopHelper.icns" "$RESOURCES_DIR/MacVirtualDesktopHelper.icns"
+cp "$SCRIPT_DIR/Resources/Icons/png/icon.png" "$RESOURCES_DIR/MacVirtualDesktopHelper.png"
 
 if xcrun -f swiftc >/dev/null 2>&1; then
 	SWIFTC=(xcrun swiftc)
@@ -47,10 +48,10 @@ if [[ -z "$SIGN_IDENTITY" ]]; then
 fi
 
 if [[ -n "$SIGN_IDENTITY" ]]; then
-	codesign --force --sign "$SIGN_IDENTITY" "$APP_DIR"
+	codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_DIR"
 else
 	echo "warning: no code signing identity found, falling back to an ad hoc signature." >&2
 	echo "warning: system permissions must be granted again after every rebuild." >&2
-	codesign --force --sign - "$APP_DIR"
+	codesign --force --deep --sign - "$APP_DIR"
 fi
 echo "$APP_DIR"

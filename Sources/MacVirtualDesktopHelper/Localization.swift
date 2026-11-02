@@ -56,6 +56,7 @@ enum Localization {
   "不支持的规则文件版本": "Unsupported rules file version", "不支持的配置备份格式或版本。": "Unsupported configuration backup format or version.",
   "不支持的配置备份格式或版本，未修改本地数据。": "Unsupported configuration backup format or version. Local data was not changed.",
   "中上": "Top Center", "中下": "Bottom Center", "主窗口打开时在 Dock 显示图标": "Show Dock icon while the main window is open",
+  "在 Dock 显示应用图标": "Show the app icon in the Dock",
   "主题": "Theme", "从列表移除": "Remove from List", "保存": "Save",
   "保存后等待完整间隔，关闭管理窗口后仍继续；手动快照不参与轮转。": "After saving, the first snapshot waits one full interval and continues after this window closes. Manual snapshots are never rotated.",
   "保存桌面规则": "Save Desktop Rules", "保留自动快照数量（1～1000）": "Automatic snapshots to keep (1–1000)",

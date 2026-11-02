@@ -116,9 +116,11 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   updateDockPresence()
  }
  private func updateDockPresence() {
-  NSApp.setActivationPolicy((applicationSettings.showDockIcon ?? true) && window?.isVisible == true ? .regular : .accessory)
+		TrayIconRenderer.applyDockPolicy(showDockIcon: applicationSettings.showDockIcon ?? true)
  }
- func windowWillClose(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }
+	func windowWillClose(_ notification: Notification) {
+		TrayIconRenderer.applyDockPolicy(showDockIcon: applicationSettings.showDockIcon ?? true)
+	}
 
 	required init?(coder: NSCoder) {
 		fatalError("init(coder:) has not been implemented")
@@ -132,7 +134,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    return
   }
 		guard let window else { return }
-  if applicationSettings.showDockIcon ?? true { NSApp.setActivationPolicy(.regular) }
+		TrayIconRenderer.applyDockPolicy(showDockIcon: applicationSettings.showDockIcon ?? true)
 		refreshInBackground()
 		if !window.isVisible {
 			window.center()

@@ -34,7 +34,7 @@ final class SettingsController: NSWindowController {
  private let startupText = NSTextField(string: "MacVirtualDesktopHelper")
  private let startupDuration = NSTextField(string: "2")
  private let restoreFocus = NSButton(checkboxWithTitle: "切换后恢复目标桌面上次窗口焦点".localized, target: nil, action: nil)
- private let dockIcon = NSButton(checkboxWithTitle: "主窗口打开时在 Dock 显示图标".localized, target: nil, action: nil)
+ private let dockIcon = NSButton(checkboxWithTitle: "在 Dock 显示应用图标".localized, target: nil, action: nil)
  private let glass = NSButton(checkboxWithTitle: "启用主窗口毛玻璃背景".localized, target: nil, action: nil)
  private let overviewSize = NSPopUpButton()
  private let iconSpacing = NSTextField(string: "8")

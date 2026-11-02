@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
  private var licenseDocument: TextDocumentController?
 
 	func applicationDidFinishLaunching(_ notification: Notification) {
+		NSApp.applicationIconImage = TrayIconRenderer.applicationIcon()
 		installMainMenu()
   ApplicationLog.write("Application started")
   DistributedNotificationCenter.default().addObserver(self, selector: #selector(showOverview), name: Notification.Name("local.macvirtualdesktophelper.showOverview"), object: nil)
