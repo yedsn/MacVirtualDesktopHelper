@@ -138,6 +138,7 @@ final class WindowSwitcherController {
  private func showPanel() {
   let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 520, height: 92), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
   panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear; panel.hidesOnDeactivate = false
+  panel.acceptsMouseMovedEvents = true
   panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
   self.panel = panel; updatePanel()
   let screen = targetScreen
@@ -158,7 +159,19 @@ final class WindowSwitcherController {
   for (index, item) in session.candidates.enumerated() {
    let status = item.backgroundStateDescription
    let description = item.displayTitle + (status.isEmpty ? "" : " · " + status)
-   let row = NSView(frame: NSRect(x: 0, y: CGFloat(index * 64), width: 480, height: 60))
+   let row = SwitcherRowView(frame: NSRect(x: 0, y: CGFloat(index * 64), width: 480, height: 60))
+   row.hover = { [weak self, weak session, weak document] in
+    guard let self, let session, self.session === session, session.select(windowID: item.id), let document else { return }
+    for (rowIndex, view) in document.subviews.enumerated() {
+     let selected = rowIndex == session.selectedIndex
+     view.setAccessibilitySelected(selected)
+     view.layer?.backgroundColor = selected ? NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor : nil
+    }
+   }
+   row.activate = { [weak self, weak session] in
+    guard let self, let session, self.session === session, session.select(windowID: item.id) else { return }
+    self.commit()
+   }
    row.wantsLayer = true; row.layer?.cornerRadius = 8
    row.setAccessibilityElement(true)
    row.setAccessibilityRole(.row)
@@ -243,4 +256,31 @@ final class WindowSwitcherController {
 
 private final class SwitcherListView: NSView {
  override var isFlipped: Bool { true }
+}
+
+private final class SwitcherRowView: NSView {
+ var activate: (() -> Void)?
+ var hover: (() -> Void)?
+ private var hoverTracking: NSTrackingArea?
+ override func updateTrackingAreas() {
+  super.updateTrackingAreas()
+  if let hoverTracking { removeTrackingArea(hoverTracking) }
+  let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+  addTrackingArea(area)
+  hoverTracking = area
+ }
+ override func mouseMoved(with event: NSEvent) { hover?() }
+ override func mouseEntered(with event: NSEvent) { hover?() }
+ override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+ override func hitTest(_ point: NSPoint) -> NSView? {
+  super.hitTest(point) == nil ? nil : self
+ }
+ override func mouseUp(with event: NSEvent) {
+  if bounds.contains(convert(event.locationInWindow, from: nil)) { activate?() }
+ }
+ override func accessibilityPerformPress() -> Bool {
+  guard let activate else { return false }
+  activate()
+  return true
+ }
 }

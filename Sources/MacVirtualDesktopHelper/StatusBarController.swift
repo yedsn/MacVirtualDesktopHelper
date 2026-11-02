@@ -17,7 +17,6 @@ final class StatusBarController: NSObject {
  var showSettings: (() -> Void)?
  var showSnapshots: (() -> Void)?
  var showAbout: (() -> Void)?
- var showSupport: (() -> Void)?
  private var compactItem: NSStatusItem?
  private var compactView: CompactStatusView?
 
@@ -231,7 +230,6 @@ final class StatusBarController: NSObject {
   }
   menu.addItem(NSMenuItem.separator())
   menu.addItem(withTitle: "关于 MacVirtualDesktopHelper".localized, action: #selector(openAbout), keyEquivalent: "").target = self
-  menu.addItem(withTitle: "支持原作者…".localized, action: #selector(openSupport), keyEquivalent: "").target = self
   menu.addItem(withTitle: "设置…".localized, action: #selector(openSettings), keyEquivalent: ",").target = self
   menu.addItem(withTitle: "刷新桌面".localized, action: #selector(refreshFromMenu), keyEquivalent: "").target = self
 		menu.addItem(withTitle: "辅助功能权限…".localized, action: #selector(openPermissions), keyEquivalent: "").target = self
@@ -250,7 +248,6 @@ final class StatusBarController: NSObject {
 	}
  @objc private func openSnapshots() { showSnapshots?() }
  @objc private func openAbout() { showAbout?() }
- @objc private func openSupport() { showSupport?() }
  @objc private func openBuiltInManager() { showOverview() }
  @objc private func openSystemManager() { NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Mission Control.app")) }
  @objc private func openDesktopFromMenu(_ sender: NSMenuItem) {

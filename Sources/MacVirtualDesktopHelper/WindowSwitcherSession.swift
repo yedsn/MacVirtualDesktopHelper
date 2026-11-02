@@ -39,6 +39,11 @@ final class WindowSwitcherSession {
  }
 
  var selected: DesktopWindow? { selectedIndex.flatMap { candidates.indices.contains($0) ? candidates[$0] : nil } }
+ func select(windowID: UInt32) -> Bool {
+  guard state == .selecting, let index = candidates.firstIndex(where: { $0.id == windowID }) else { return false }
+  selectedIndex = index
+  return true
+ }
  func advance(reverse: Bool = false) {
   guard state == .selecting, !candidates.isEmpty else { return }
   let step = reverse ? -1 : 1

@@ -44,7 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
    statusBar.showSettings = { [weak overview] in overview?.showSettings() }
    statusBar.showSnapshots = { [weak overview] in overview?.showSnapshots() }
    statusBar.showAbout = { [weak self] in self?.showAbout() }
-   statusBar.showSupport = { [weak self] in self?.openDonate() }
    overview.settingsChanged = { [weak self, weak statusBar] in statusBar?.refresh(forceRebuild: true); self?.reloadHotKeys(); self?.spaceChanged() }
    hotKeys.perform = { [weak self] action in self?.performHotKey(action) }
    overview.configureSettingsTransaction(prepare: { [weak self] settings in
@@ -105,8 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   appMenu.addItem(withTitle: "设置…".localized, action: #selector(openSettings), keyEquivalent: ",").target = self
   appMenu.addItem(withTitle: "查看日志…".localized, action: #selector(openLog), keyEquivalent: "").target = self
   appMenu.addItem(withTitle: "开源许可…".localized, action: #selector(openLicense), keyEquivalent: "").target = self
-  appMenu.addItem(withTitle: "支持原作者…".localized, action: #selector(openDonate), keyEquivalent: "").target = self
-		appMenu.addItem(withTitle: "关于 MacVirtualDesktopHelper".localized, action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+		appMenu.addItem(withTitle: "关于 MacVirtualDesktopHelper".localized, action: #selector(showAbout), keyEquivalent: "").target = self
 		appMenu.addItem(NSMenuItem.separator())
 		let hideItem = appMenu.addItem(withTitle: "隐藏".localized, action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
 		hideItem.target = NSApp
@@ -136,22 +134,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
    licenseDocument?.show(contents: contents)
   } catch { NSAlert(error: error).runModal() }
  }
- @objc private func openDonate() {
-  if let url = URL(string: "https://www.paypal.com/donate/?hosted_button_id=BG5FYMAHFG9V6") { openResource(url, title: "无法打开支持页面".localized) }
- }
- private func showAbout() {
+ @objc private func showAbout() {
   NSApp.orderFrontStandardAboutPanel(options: [
    .applicationName: "MacVirtualDesktopHelper",
    .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
-   .credits: NSAttributedString(string: "Windows Virtual Desktop Helper 的 Mac 功能迁移。\nCopyright © 2022–2025 Dan Krusi".localized, attributes: [.font: NSFont.systemFont(ofSize: 12)])
+   .credits: NSAttributedString(string: "macOS 虚拟桌面助手。\n作者：yedsn".localized, attributes: [.font: NSFont.systemFont(ofSize: 12)])
   ])
- }
- private func openResource(_ url: URL, title: String) {
-  guard !NSWorkspace.shared.open(url) else { return }
-  ApplicationLog.write(title + ": " + url.absoluteString)
-  let alert = NSAlert(); alert.messageText = title
-  alert.informativeText = "系统未能使用默认应用打开：\n".localized + (url.isFileURL ? url.path : url.absoluteString)
-  alert.runModal()
  }
  @objc private func showOverview() { overviewController?.show() }
  @objc private func spaceChanged() {

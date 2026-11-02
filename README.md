@@ -18,6 +18,10 @@
 
 原生 Space 创建、删除、重命名及导入时恢复结构暂不在范围内。缺失目标桌面必须报告，不能静默映射或创建。
 
+## 作者
+
+由 [yedsn](https://github.com/yedsn) 开发和维护 macOS 版本。当前不提供捐赠入口。
+
 ## 来源与许可
 
 源项目：相邻目录 WindowsVirtualDesktopHelper，基线提交 `6000fc6c4520526255afecd9ab6df5e2f852439f`，另包含本会话已验证但未提交的 MacPrototype 修复。来源验证记录保存在 Documentation，不能替代新应用独立验证。

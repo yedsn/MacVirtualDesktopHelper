@@ -1,3 +1,8 @@
+MacVirtualDesktopHelper
+Copyright (c) 2026 yedsn
+
+Based on Windows Virtual Desktop Helper; upstream copyright and license follow.
+
 Windows Virtual Desktop Helper
 Copyright (c) 2022-2025 Dan Krusi
 

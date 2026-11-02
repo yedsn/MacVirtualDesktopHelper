@@ -20,6 +20,6 @@ codesign --verify --strict .build/MacVirtualDesktopHelper.app
 
 ## 日志与许可
 
-日志路径为 `~/Library/Logs/MacVirtualDesktopHelper/application.log`，应用菜单提供“查看日志”，在应用内只读窗口显示，每次打开重新加载。“关于”使用原生关于面板；“开源许可”在应用内显示打包的 LICENSE.md 和 YABAI-LICENSE.txt；“支持原作者”打开沿用 Windows 项目的支持链接。
+日志路径为 `~/Library/Logs/MacVirtualDesktopHelper/application.log`，应用菜单提供“查看日志”，在应用内只读窗口显示，每次打开重新加载。“关于”使用原生关于面板，作者显示为 yedsn；“开源许可”在应用内显示打包的 LICENSE.md 和 YABAI-LICENSE.txt，保留上游版权及许可。主菜单和菜单栏右键菜单均不再提供捐赠入口。
 
 应用包 Resources 中保留 LICENSE.md 和 YABAI-LICENSE.txt，后者对应 Native 桥接引用的上游实现。发布时应完整保留两份许可。
