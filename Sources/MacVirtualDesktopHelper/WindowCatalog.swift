@@ -77,10 +77,13 @@ final class WindowCatalog {
 				let ownerName = stringValue(info[kCGWindowOwnerName as String])
 					?? app?.localizedName
 					?? "未知应用"
+				let reportedTitle = stringValue(info[kCGWindowName as String]) ?? ""
+				let title = reportedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+					? (accessibility.windowTitle(windowID: windowID, pid: pid) ?? reportedTitle) : reportedTitle
 				var window = DesktopWindow(
 					id: windowID,
 					ownerName: ownerName,
-					title: stringValue(info[kCGWindowName as String]) ?? "",
+					title: title,
 					bundleID: app?.bundleIdentifier ?? "",
 					pid: pid,
 					spaceID: targetSpaceID,

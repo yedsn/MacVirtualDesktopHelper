@@ -80,14 +80,14 @@ final class WindowSwitcherController {
    return
   }
   if preparing { pendingDirections.append(reverse); return }
-  guard accessibility.isTrusted else { accessibility.requestAccess(); reportFailure("需要辅助功能权限才能切换窗口。"); return }
+  guard accessibility.isTrusted else { accessibility.requestAccess(); reportFailure("需要辅助功能权限才能切换窗口。", settingsAnchor: "Privacy_Accessibility"); return }
   guard flagsMonitor != nil, keyMonitor != nil else {
-   reportFailure("键盘监听未能创建，请授权后重新启动应用。")
+   reportFailure("键盘监听未能创建，请检查辅助功能和输入监听权限后重新启动应用。", settingsAnchor: "Privacy_ListenEvent")
    return
   }
   guard CGPreflightListenEventAccess() else {
    CGRequestListenEventAccess()
-   reportFailure("需要输入监听权限，请在系统设置中授权后重试。")
+   reportFailure("需要输入监听权限，请在系统设置中授权后重试。", settingsAnchor: "Privacy_ListenEvent")
    return
   }
   let currentID = accessibility.focusedWindowID(pid: NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
@@ -114,11 +114,12 @@ final class WindowSwitcherController {
   collectionQueue.async { [weak self] in
    guard let self else { return }
    let snapshot = self.catalog.snapshot(targetSpaceID: current.id)
-   let selectable = snapshot.groups.first(where: { $0.space.id == current.id })?.windows ?? []
+   var selectable = snapshot.groups.first(where: { $0.space.id == current.id })?.windows ?? []
    var identities: [UInt32: AXUIElement] = [:]
    for item in selectable {
     if let identity = self.accessibility.windowIdentity(item) { identities[item.id] = identity }
    }
+   selectable.removeAll { $0.isAccessibilityUnavailable || identities[$0.id] == nil }
    DispatchQueue.main.async { [weak self] in
     guard let self, self.generation == token, self.preparing else { return }
     self.preparing = false
@@ -158,21 +159,21 @@ final class WindowSwitcherController {
   scroll.hasVerticalScroller = true; scroll.drawsBackground = false
   let document = SwitcherListView(frame: NSRect(x: 0, y: 0, width: 480, height: CGFloat(session.candidates.count * 64)))
   for (index, item) in session.candidates.enumerated() {
+   let status = item.backgroundStateDescription
+   let description = item.displayTitle + (status.isEmpty ? "" : " · " + status)
    let row = NSView(frame: NSRect(x: 0, y: CGFloat(index * 64), width: 480, height: 60))
    row.wantsLayer = true; row.layer?.cornerRadius = 8
    row.setAccessibilityElement(true)
    row.setAccessibilityRole(.row)
-   row.setAccessibilityLabel(item.ownerName + " · " + item.displayTitle)
+   row.setAccessibilityLabel(item.ownerName + " · " + description)
    row.setAccessibilitySelected(index == session.selectedIndex)
-   row.setAccessibilityEnabled(!item.isAccessibilityUnavailable)
-   row.alphaValue = item.isAccessibilityUnavailable ? 0.45 : 1
    if index == session.selectedIndex { row.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor }
    let icon = NSImageView(frame: NSRect(x: 10, y: 14, width: 32, height: 32)); icon.image = item.icon
    row.addSubview(icon)
    let name = NSTextField(labelWithString: item.ownerName)
    name.font = .systemFont(ofSize: 13, weight: .semibold); name.frame = NSRect(x: 54, y: 32, width: 410, height: 18)
    row.addSubview(name)
-   let detail = NSTextField(labelWithString: item.displayTitle + (item.backgroundStateDescription.isEmpty ? "" : " · " + item.backgroundStateDescription))
+   let detail = NSTextField(labelWithString: description)
    detail.lineBreakMode = .byTruncatingTail; detail.textColor = .secondaryLabelColor
    detail.frame = NSRect(x: 54, y: 10, width: 410, height: 18); row.addSubview(detail)
    document.addSubview(row)
@@ -207,23 +208,27 @@ final class WindowSwitcherController {
    let sameSpace = self.skyLight.spaces().contains { $0.id == originSpaceID && $0.isCurrent }
    let focused = self.accessibility.focusedWindowID(pid: target.pid) == target.id
    let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == target.pid
-   if sameSpace && focused && frontmost && self.accessibility.isMinimized(target) == false {
+   let visibleApplication = NSRunningApplication(processIdentifier: target.pid)?.isHidden == false
+   if sameSpace && focused && frontmost && visibleApplication && self.accessibility.isMinimized(target) == false {
     self.history.removeAll { $0 == target.id }; self.history.insert(target.id, at: 0)
    } else if sameSpace && attempts > 1 {
     self.verifyFocus(target, originSpaceID: originSpaceID, token: token, attempts: attempts - 1)
    } else { self.reportFailure("窗口未能在原桌面取得焦点。") }
   }
  }
- private func reportFailure(_ message: String) {
+ private func reportFailure(_ message: String, settingsAnchor: String? = nil) {
   ApplicationLog.write("Window switcher: " + message)
   NSSound.beep()
   let alert = NSAlert()
   alert.messageText = "窗口切换未完成"
   alert.informativeText = message
+  alert.window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+  alert.window.level = .floating
   alert.addButton(withTitle: "好")
-  if message.contains("权限") { alert.addButton(withTitle: "打开权限设置") }
-  if alert.runModal() == .alertSecondButtonReturn {
-   let anchor = message.contains("输入监听") ? "Privacy_ListenEvent" : "Privacy_Accessibility"
+  if settingsAnchor != nil { alert.addButton(withTitle: "打开权限设置") }
+  NSApp.activate(ignoringOtherApps: true)
+  alert.window.orderFrontRegardless()
+  if alert.runModal() == .alertSecondButtonReturn, let anchor = settingsAnchor {
    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?" + anchor) { NSWorkspace.shared.open(url) }
   }
  }

@@ -10,8 +10,11 @@ final class WindowSwitcherSession {
  private(set) var committed = false
 
  init(candidates: [DesktopWindow], currentID: UInt32?, mostRecentIDs: [UInt32] = [], reverse: Bool = false) {
+  let candidates = candidates.filter { !$0.isAccessibilityUnavailable }
   var seen = Set<UInt32>()
-  var order = mostRecentIDs.compactMap { id -> DesktopWindow? in
+  // The focus observed at trigger time is newer than the sampled history.
+  let recentIDs = currentID.map { [$0] + mostRecentIDs } ?? mostRecentIDs
+  var order = recentIDs.compactMap { id -> DesktopWindow? in
    guard seen.insert(id).inserted else { return nil }
    return candidates.first(where: { $0.id == id })
   }

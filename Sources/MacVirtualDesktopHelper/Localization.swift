@@ -113,7 +113,7 @@ enum Localization {
   "时间": "Time", "显示方式": "Display mode", "更新 → ": "Updated → ",
   "更新桌面规则": "Update Desktop Rules", "更新锁定规则": "Update Cleanup Rules",
   "未知归属": "Unknown ownership", "未知桌面": "Unknown desktop",
-  "隐藏或最小化": "Hidden or minimized", "已最小化": "Minimized", "应用已隐藏": "Application hidden", "后台窗口": "Background window",
+  "隐藏或最小化": "Hidden or minimized", "已最小化": "Minimized", "应用已隐藏": "Application hidden", "后台窗口": "Background window", "不可切换": "Unavailable",
   "未能切换到目标桌面，请重试。": "Could not switch to the target desktop. Try again.",
   "本次处理 ": "Processed this run: ", "查看": "View", "查看日志…": "View Log…",
   "标题使用正则表达式": "Use a regular expression for the title", "桌面": "Desktop", "桌面 ": "Desktop ",

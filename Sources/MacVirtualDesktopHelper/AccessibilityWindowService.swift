@@ -68,6 +68,12 @@ final class AccessibilityWindowService {
 	func windowIdentity(_ target: DesktopWindow) -> AXUIElement? {
 		accessibilityWindow(windowID: target.id, pid: target.pid)
 	}
+	func windowTitle(windowID: CGWindowID, pid: pid_t) -> String? {
+		guard isTrusted, let window = accessibilityWindow(windowID: windowID, pid: pid) else { return nil }
+		var value: CFTypeRef?
+		guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &value) == .success else { return nil }
+		return value as? String
+	}
 	func isStandardWindow(_ target: DesktopWindow) -> Bool {
 		guard let window = accessibilityWindow(windowID: target.id, pid: target.pid) else { return false }
 		var role: CFTypeRef?
