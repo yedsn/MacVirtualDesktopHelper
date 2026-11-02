@@ -10,6 +10,7 @@ final class RuleEditor: NSWindowController, NSTableViewDataSource, NSTableViewDe
  private let editButton = NSButton(title: "编辑".localized, target: nil, action: nil)
  private let deleteButton = NSButton(title: "删除".localized, target: nil, action: nil)
  private var selectedRuleID: UUID?
+ private weak var editingTitleField: NSTextField?
  var changed: (() -> Void)?
  init(store: RuleStore, desktopMode: Bool = false, spaces: @escaping () -> [DesktopSpace] = { [] }) {
   self.store = store
@@ -89,6 +90,30 @@ final class RuleEditor: NSWindowController, NSTableViewDataSource, NSTableViewDe
   guard rules.indices.contains(table.selectedRow) else { return }
   edit(rules[table.selectedRow])
  }
+ @objc private func toggleTitleRegex(_ sender: NSButton) {
+  guard let title = editingTitleField else { return }
+  if sender.state == .on {
+   title.stringValue = NSRegularExpression.escapedPattern(for: title.stringValue)
+  } else {
+   // Undo literal escapes without stripping regex sequences such as \d or \w.
+   let punctuation = #"\.*+?()[]{}^$|/"#
+   var literal = ""
+   var escaped = false
+   for scalar in title.stringValue.unicodeScalars {
+    if escaped {
+     if !punctuation.unicodeScalars.contains(scalar) { literal += "\\" }
+     literal.unicodeScalars.append(scalar)
+     escaped = false
+    } else if scalar == "\\" {
+     escaped = true
+    } else {
+     literal.unicodeScalars.append(scalar)
+    }
+   }
+   if escaped { literal += "\\" }
+   title.stringValue = literal
+  }
+ }
  private func edit(_ original: WindowRule?) {
   let alert = NSAlert()
   alert.messageText = original == nil ? "新增规则".localized : "编辑规则".localized
@@ -96,7 +121,9 @@ final class RuleEditor: NSWindowController, NSTableViewDataSource, NSTableViewDe
   let bundle = NSTextField(string: original?.bundleID ?? "")
   let path = NSTextField(string: original?.applicationPath ?? "")
   let title = NSTextField(string: original?.title ?? "")
-  let regex = NSButton(checkboxWithTitle: "标题使用正则表达式".localized, target: nil, action: nil)
+  editingTitleField = title
+  defer { editingTitleField = nil }
+  let regex = NSButton(checkboxWithTitle: "标题使用正则表达式".localized, target: self, action: #selector(toggleTitleRegex(_:)))
   regex.state = original?.titleIsRegex == true ? .on : .off
   let stack = NSStackView(views: [NSTextField(labelWithString: "Bundle ID（或填写应用路径）".localized), bundle, NSTextField(labelWithString: "应用路径".localized), path, NSTextField(labelWithString: "窗口标题".localized), title, regex])
   let destination = NSPopUpButton()

@@ -118,6 +118,62 @@ import AppKit
   let afterTopology = try Data(contentsOf: store.url)
   precondition(beforeTopology == afterTopology)
   topologyEditor.close()
+  let literalTitle = #"报告 [草稿] (v1.2) {副本} + ? * ^ $ | / C:\work\file 👩‍💻"#
+  let escapedTitle = #"报告 \[草稿] \(v1\.2\) \{副本\} \+ \? \* \^ \$ \| \/ C:\\work\\file 👩‍💻"#
+  for desktopMode in [true, false] {
+   let rule = WindowRule(bundleID: "test.toggle", applicationPath: "/Applications/Test.app", title: literalTitle, targetSpaceUUID: space.uuid, targetDisplayUUID: space.displayUUID, targetIndex: space.index)
+   try store.update { state in
+    if desktopMode { state.desktopRules = [rule] }
+    else { state.cleanupRules = [rule] }
+   }
+   let toggleEditor = RuleEditor(store: store, desktopMode: desktopMode, spaces: { [space] })
+   toggleEditor.showWindow(nil)
+   let toggleControls = views(toggleEditor.window!.contentView!)
+   toggleControls.compactMap { $0 as? NSTableView }.first!.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+   func editToggling(_ verify: @escaping (NSTextField, NSButton) -> Void) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+     let modal = views(NSApp.modalWindow!.contentView!)
+     let fields = modal.compactMap { $0 as? NSTextField }.filter { $0.isEditable }
+     let checkbox = modal.compactMap { $0 as? NSButton }.first { $0.title == "标题使用正则表达式" }!
+     verify(fields[2], checkbox)
+     modal.compactMap { $0 as? NSButton }.first { $0.title == "保存" }!.performClick(nil)
+    }
+    toggleControls.compactMap { $0 as? NSButton }.first { $0.title == "编辑" }!.performClick(nil)
+   }
+   editToggling { title, checkbox in
+    precondition(title.stringValue == literalTitle && checkbox.state == .off)
+    for _ in 0..<3 {
+     checkbox.performClick(nil)
+     precondition(title.stringValue == escapedTitle && checkbox.state == .on)
+     let pattern = try! NSRegularExpression(pattern: title.stringValue)
+     let fullRange = NSRange(literalTitle.startIndex..., in: literalTitle)
+     precondition(pattern.firstMatch(in: literalTitle, range: fullRange)?.range == fullRange)
+     checkbox.performClick(nil)
+     precondition(title.stringValue == literalTitle && checkbox.state == .off)
+    }
+    checkbox.performClick(nil)
+   }
+   var saved = try RuleStore(url: store.url).state
+   precondition((desktopMode ? saved.desktopRules : saved.cleanupRules)[0].title == escapedTitle)
+   editToggling { title, checkbox in
+    precondition(title.stringValue == escapedTitle && checkbox.state == .on)
+    checkbox.performClick(nil)
+    precondition(title.stringValue == literalTitle && checkbox.state == .off)
+    // Preserve regex-specific escapes and a trailing slash when removing literal escapes.
+    checkbox.performClick(nil)
+    title.stringValue = #"^Report\d+\w*\.txt$\"#
+    checkbox.performClick(nil)
+    precondition(title.stringValue == #"^Report\d+\w*.txt$\"#)
+    title.stringValue = literalTitle
+   }
+   saved = try RuleStore(url: store.url).state
+   let restored = (desktopMode ? saved.desktopRules : saved.cleanupRules)[0]
+   precondition(restored.id == rule.id && restored.title == literalTitle && !restored.titleIsRegex)
+   precondition(restored.bundleID == rule.bundleID && restored.applicationPath == rule.applicationPath)
+   precondition(restored.targetSpaceUUID == rule.targetSpaceUUID && restored.targetDisplayUUID == rule.targetDisplayUUID && restored.targetIndex == rule.targetIndex)
+   toggleEditor.close()
+  }
+  print("PASS: both rule editors escape titles on checkbox clicks, restore on repeated toggles and after reload, and persist both modes")
   print("PASS: disappearing target blocks save, retains input and cancellation preserves disk")
   print("PASS: rule editor invalid-regex retry retains input; add/edit preserve fields; cancel/delete persist correctly")
  }
