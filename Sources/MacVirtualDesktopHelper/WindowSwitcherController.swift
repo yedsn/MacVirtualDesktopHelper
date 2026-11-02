@@ -8,6 +8,7 @@ final class WindowSwitcherController {
  private let catalog: WindowCatalog
  private let accessibility: AccessibilityWindowService
  private var session: WindowSwitcherSession?
+ private var windowIdentities: [UInt32: AXUIElement] = [:]
  private var history: [UInt32] = []
  private var flagsMonitor: Any?
  private var keyMonitor: Any?
@@ -114,9 +115,14 @@ final class WindowSwitcherController {
    guard let self else { return }
    let snapshot = self.catalog.snapshot(targetSpaceID: current.id)
    let selectable = snapshot.groups.first(where: { $0.space.id == current.id })?.windows ?? []
+   var identities: [UInt32: AXUIElement] = [:]
+   for item in selectable {
+    if let identity = self.accessibility.windowIdentity(item) { identities[item.id] = identity }
+   }
    DispatchQueue.main.async { [weak self] in
     guard let self, self.generation == token, self.preparing else { return }
     self.preparing = false
+    self.windowIdentities = identities
     guard selectable.contains(where: { !$0.isAccessibilityUnavailable }) else { self.cancel(); self.reportFailure("当前桌面没有可切换的窗口。"); return }
     self.session = WindowSwitcherSession(candidates: selectable, currentID: currentID, mostRecentIDs: self.history, reverse: reverse)
     for direction in self.pendingDirections { self.session?.advance(reverse: direction) }
@@ -179,14 +185,17 @@ final class WindowSwitcherController {
 
  private func commit() {
   guard let session, let target = session.commit() else { return }
-  guard let originSpaceID = sessionSpaceID,
+  guard let identity = windowIdentities[target.id],
+        let liveIdentity = accessibility.windowIdentity(target), CFEqual(identity, liveIdentity),
+        let originSpaceID = sessionSpaceID,
         skyLight.spaces().contains(where: { $0.id == originSpaceID && $0.isCurrent }),
         skyLight.spaceIDs(for: target.id).contains(originSpaceID),
         NSRunningApplication(processIdentifier: target.pid).map({ ($0.bundleIdentifier ?? "") == target.bundleID }) == true,
         accessibility.containsWindow(target) else { cancel(); reportFailure("目标窗口已关闭、移走或无法操作。"); return }
   panel?.orderOut(nil); panel = nil
   self.session = nil
-  if let error = accessibility.focus(target, activateAllWindows: false) {
+  windowIdentities.removeAll()
+  if let error = accessibility.focus(target, activateAllWindows: false, expectedWindow: identity) {
    reportFailure(error)
   } else {
    verifyFocus(target, originSpaceID: originSpaceID, token: generation, attempts: 8)
@@ -218,7 +227,7 @@ final class WindowSwitcherController {
    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?" + anchor) { NSWorkspace.shared.open(url) }
   }
  }
- func cancel() { generation = UUID(); preparing = false; pendingDirections = []; released = false; session?.cancel(); session = nil; panel?.orderOut(nil); panel = nil }
+ func cancel() { generation = UUID(); preparing = false; pendingDirections = []; released = false; session?.cancel(); session = nil; windowIdentities.removeAll(); panel?.orderOut(nil); panel = nil }
  func cancelIfSpaceChanged() {
   guard let sessionSpaceID, skyLight.spaces().first(where: { $0.id == sessionSpaceID })?.isCurrent != true else { return }
   cancel()

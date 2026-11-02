@@ -25,6 +25,8 @@ import AppKit
   precondition(disabled.selected == nil && disabled.commit() == nil)
   let firstReverse = WindowSwitcherSession(candidates: [window(1), unavailable, window(3)], currentID: 1, reverse: true)
   precondition(firstReverse.selected?.id == 3)
+  let noFocusReverse = WindowSwitcherSession(candidates: windows, currentID: nil, reverse: true)
+  precondition(noFocusReverse.selected?.id == 3)
   let duplicateHistory = WindowSwitcherSession(candidates: windows, currentID: 1, mostRecentIDs: [1, 1, 2, 2])
   precondition(duplicateHistory.candidates.count == 3 && duplicateHistory.selected?.id == 2)
   var old = ApplicationSettings(); old.theme = "dark"

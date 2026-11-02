@@ -30,7 +30,7 @@ final class AccessibilityWindowService {
 		NSWorkspace.shared.open(url)
 	}
 
-	func focus(_ target: DesktopWindow, activateAllWindows: Bool = true) -> String? {
+	func focus(_ target: DesktopWindow, activateAllWindows: Bool = true, expectedWindow: AXUIElement? = nil) -> String? {
 		guard isTrusted else {
 			return "需要先授予辅助功能权限。".localized
 		}
@@ -39,6 +39,9 @@ final class AccessibilityWindowService {
 		}
 		guard let axWindow = accessibilityWindow(windowID: target.id, pid: target.pid) else {
 			return "当前无法读取该窗口的辅助功能对象。".localized
+		}
+		if let expectedWindow, !CFEqual(expectedWindow, axWindow) {
+			return "目标窗口身份已改变。"
 		}
 
 		if app.isHidden { app.unhide() }
@@ -61,6 +64,9 @@ final class AccessibilityWindowService {
 
 	func containsWindow(_ target: DesktopWindow) -> Bool {
 		return accessibilityWindow(windowID: target.id, pid: target.pid) != nil
+	}
+	func windowIdentity(_ target: DesktopWindow) -> AXUIElement? {
+		accessibilityWindow(windowID: target.id, pid: target.pid)
 	}
 	func isStandardWindow(_ target: DesktopWindow) -> Bool {
 		guard let window = accessibilityWindow(windowID: target.id, pid: target.pid) else { return false }

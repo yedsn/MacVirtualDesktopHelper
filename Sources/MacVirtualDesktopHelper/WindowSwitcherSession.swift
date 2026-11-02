@@ -25,11 +25,14 @@ final class WindowSwitcherSession {
   self.candidates = order
   if let currentID, let index = order.firstIndex(where: { $0.id == currentID }) {
    selectedIndex = index
-   state = .selecting
-   advance(reverse: reverse)
-  } else { selectedIndex = order.isEmpty ? nil : 0 }
+  } else {
+   // Start from the virtual position before the first item (or after the
+   // last item for reverse selection), so an unavailable focus window does
+   // not bias the initial direction.
+   selectedIndex = nil
+  }
   state = .selecting
-  if selected?.isAccessibilityUnavailable == true { advance(reverse: reverse) }
+  advance(reverse: reverse)
  }
 
  var selected: DesktopWindow? { selectedIndex.flatMap { candidates.indices.contains($0) ? candidates[$0] : nil } }
