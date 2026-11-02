@@ -21,6 +21,9 @@ import AppKit
   let skipping = WindowSwitcherSession(candidates: [window(1), unavailable, window(3)], currentID: 1)
   precondition(skipping.candidates.map { $0.id } == [1, 3] && skipping.selected?.id == 3)
   skipping.advance(reverse: true); precondition(skipping.selected?.id == 1)
+  var special = window(4); special.isExcludedFromSwitcher = true
+  let regularOnly = WindowSwitcherSession(candidates: windows + [special], currentID: nil)
+  precondition(regularOnly.candidates.map { $0.id } == [1, 2, 3])
   let disabled = WindowSwitcherSession(candidates: [unavailable], currentID: nil)
   precondition(disabled.candidates.isEmpty && disabled.selected == nil && disabled.commit() == nil)
   let firstReverse = WindowSwitcherSession(candidates: [window(1), unavailable, window(3)], currentID: 1, reverse: true)

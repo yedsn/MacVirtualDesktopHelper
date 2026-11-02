@@ -138,10 +138,10 @@ final class AccessibilityWindowService {
 			return error != nil || hasUnresolvedIDs ? nil : false
 		}
 
-		func excludesBackgroundRecord(_ id: CGWindowID, isAccessoryApplication: Bool, isOnCurrentSpace: Bool, isOnScreen: Bool, isApplicationHidden: Bool) -> Bool {
-			// Accessory apps can retain ordered-out panels in CG/Space lists. Only
-			// discard with positive current-Space evidence and a complete AX query.
-			isAccessoryApplication && isOnCurrentSpace && !isOnScreen && !isApplicationHidden && presence(of: id) == false
+		func awaitsDesktopActivation(_ id: CGWindowID, isRegularApplication: Bool, isOnCurrentSpace: Bool) -> Bool {
+			// AXWindows commonly covers only the selected Space. Its absence is not
+			// a reason to move another desktop's ordinary app window into Other.
+			isRegularApplication && !isOnCurrentSpace && windows[id]?.isStandard != false
 		}
 
 		func apply(to window: inout DesktopWindow) {

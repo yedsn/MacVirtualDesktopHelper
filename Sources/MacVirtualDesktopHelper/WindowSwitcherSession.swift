@@ -10,7 +10,7 @@ final class WindowSwitcherSession {
  private(set) var committed = false
 
  init(candidates: [DesktopWindow], currentID: UInt32?, mostRecentIDs: [UInt32] = [], reverse: Bool = false) {
-  let candidates = candidates.filter { !$0.isAccessibilityUnavailable }
+  let candidates = candidates.filter { !$0.isAccessibilityUnavailable && !$0.isExcludedFromSwitcher }
   var seen = Set<UInt32>()
   // The focus observed at trigger time is newer than the sampled history.
   let recentIDs = currentID.map { [$0] + mostRecentIDs } ?? mostRecentIDs
@@ -45,13 +45,13 @@ final class WindowSwitcherSession {
   var index = selectedIndex ?? (reverse ? 0 : -1)
   for _ in candidates.indices {
    index = (index + step + candidates.count) % candidates.count
-   if !candidates[index].isAccessibilityUnavailable { selectedIndex = index; return }
+   if !candidates[index].isAccessibilityUnavailable && !candidates[index].isExcludedFromSwitcher { selectedIndex = index; return }
   }
   selectedIndex = nil
  }
  func cancel() { guard !committed else { return }; state = .cancelled; selectedIndex = nil }
  func commit() -> DesktopWindow? {
-  guard state == .selecting, !committed, let selected, !selected.isAccessibilityUnavailable else { return nil }
+  guard state == .selecting, !committed, let selected, !selected.isAccessibilityUnavailable, !selected.isExcludedFromSwitcher else { return nil }
   committed = true; state = .committing; return selected
  }
 }

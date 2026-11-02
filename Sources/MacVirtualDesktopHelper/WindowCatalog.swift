@@ -45,6 +45,7 @@ final class WindowCatalog {
 		var inspections: [pid_t: AccessibilityWindowService.WindowInspection] = [:]
 		var seenWindowIDs = Set<CGWindowID>()
 		var windowsBySpace: [UInt64: [DesktopWindow]] = [:]
+		var identities: [UInt32: AXUIElement] = [:]
 
 		func inspection(for pid: pid_t) -> AccessibilityWindowService.WindowInspection {
 			if let cached = inspections[pid] { return cached }
@@ -56,7 +57,7 @@ final class WindowCatalog {
 		for space in spaces where requestedSpaceID == nil || space.id == requestedSpaceID {
 			for windowID in skyLight.windowIDs(on: space.id) where !seenWindowIDs.contains(windowID) {
 				guard let info = windowInfo[windowID] else { continue }
-				guard shouldInclude(info: info, currentPID: currentPID, includeSmallWindows: requestedSpaceID != nil) else { continue }
+				guard shouldInclude(info: info, currentPID: currentPID, includeSmallWindows: true) else { continue }
 
 				let associatedSpaceIDs = skyLight.spaceIDs(for: windowID).filter { spaceIDs.contains($0) }
 				guard !associatedSpaceIDs.isEmpty else { continue }
@@ -94,11 +95,15 @@ final class WindowCatalog {
 				)
 				inspection(for: pid).apply(to: &window)
 				window.isApplicationHidden = app?.isHidden ?? false
-				if inspection(for: pid).excludesBackgroundRecord(windowID,
-					isAccessoryApplication: app?.activationPolicy == .accessory,
-					isOnCurrentSpace: spaces.contains { $0.isCurrent && associatedSpaceIDs.contains($0.id) },
-					isOnScreen: window.isOnScreen, isApplicationHidden: window.isApplicationHidden) { continue }
-				if requestedSpaceID != nil, inspection(for: pid).windows[windowID]?.isStandard == false { continue }
+				// Match Option+Tab's standard-window and live AX identity requirements.
+				if !window.isAccessibilityUnavailable,
+					inspection(for: pid).windows[windowID]?.isStandard != false,
+					let identity = accessibility.windowIdentity(window) {
+					identities[windowID] = identity
+				} else { window.isExcludedFromSwitcher = true }
+				window.awaitsDesktopActivation = window.isExcludedFromSwitcher && inspection(for: pid).awaitsDesktopActivation(windowID,
+					isRegularApplication: app?.activationPolicy == .regular,
+					isOnCurrentSpace: spaces.contains { $0.isCurrent && associatedSpaceIDs.contains($0.id) })
 				for memberSpaceID in associatedSpaceIDs {
 					windowsBySpace[memberSpaceID, default: []].append(window)
 				}
@@ -119,12 +124,13 @@ final class WindowCatalog {
   if accessibility.isTrusted && requestedSpaceID == nil {
    var unknown: [DesktopWindow] = []
    for (windowID, info) in windowInfo where !seenWindowIDs.contains(windowID) {
-    guard shouldInclude(info: info, currentPID: currentPID), skyLight.spaceIDs(for: windowID).allSatisfy({ !spaceIDs.contains($0) }) else { continue }
+    guard shouldInclude(info: info, currentPID: currentPID, includeSmallWindows: true), skyLight.spaceIDs(for: windowID).allSatisfy({ !spaceIDs.contains($0) }) else { continue }
     let pid = int32Value(info[kCGWindowOwnerPID as String]) ?? 0
     let app = NSRunningApplication(processIdentifier: pid)
     var item = DesktopWindow(id: windowID, ownerName: stringValue(info[kCGWindowOwnerName as String]) ?? app?.localizedName ?? "未知应用", title: stringValue(info[kCGWindowName as String]) ?? "", bundleID: app?.bundleIdentifier ?? "", pid: pid, spaceID: 0, displayUUID: "", isOnScreen: boolValue(info[kCGWindowIsOnscreen as String]) ?? false, isSticky: false, icon: app?.icon)
     inspection(for: pid).apply(to: &item)
     item.isApplicationHidden = app?.isHidden ?? false
+    item.isExcludedFromSwitcher = true
     if inspection(for: pid).presence(of: windowID) == true { unknown.append(item) }
    }
    if !unknown.isEmpty {
@@ -133,7 +139,7 @@ final class WindowCatalog {
    }
   }
 
-		return WindowSnapshot(spaces: spaces, groups: groups, capturedAt: Date())
+		return WindowSnapshot(spaces: spaces, groups: groups, capturedAt: Date(), switcherIdentities: identities)
 	}
 
 	func currentSpaceIDsByDisplay() -> [String: UInt64] {

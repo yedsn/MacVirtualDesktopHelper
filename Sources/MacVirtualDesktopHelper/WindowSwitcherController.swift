@@ -114,12 +114,9 @@ final class WindowSwitcherController {
   collectionQueue.async { [weak self] in
    guard let self else { return }
    let snapshot = self.catalog.snapshot(targetSpaceID: current.id)
-   var selectable = snapshot.groups.first(where: { $0.space.id == current.id })?.windows ?? []
-   var identities: [UInt32: AXUIElement] = [:]
-   for item in selectable {
-    if let identity = self.accessibility.windowIdentity(item) { identities[item.id] = identity }
-   }
-   selectable.removeAll { $0.isAccessibilityUnavailable || identities[$0.id] == nil }
+   let selectable = (snapshot.groups.first(where: { $0.space.id == current.id })?.windows ?? [])
+    .filter { !$0.isExcludedFromSwitcher && !$0.isAccessibilityUnavailable }
+   let identities = snapshot.switcherIdentities
    DispatchQueue.main.async { [weak self] in
     guard let self, self.generation == token, self.preparing else { return }
     self.preparing = false

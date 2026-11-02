@@ -80,11 +80,10 @@ import AppKit
   WindowGroup(space: first, windows: [visible, minimized, sharedMinimized]),
   WindowGroup(space: second, windows: [hidden, sharedMinimized])
  ])
- precondition(backgroundGroups.count == 3)
- precondition(backgroundGroups[0].space.id == first.id && backgroundGroups[0].windows.map(\.id) == [81])
- precondition(backgroundGroups[1].space.id == second.id && backgroundGroups[1].windows.isEmpty)
- precondition(backgroundGroups[2].space.id == DesktopSpace.backgroundWindowsID)
- precondition(backgroundGroups[2].windows.map(\.id) == [82, 83, 84])
+ precondition(backgroundGroups.count == 2)
+ precondition(backgroundGroups[0].windows.map { $0.id } == [81, 82, 84])
+ precondition(backgroundGroups[1].windows.map { $0.id } == [83, 84])
+ // Option+Tab includes hidden/minimized targets, so they stay in their desktop.
  var mixed = visible
  mixed.isMinimized = true
  mixed.isApplicationHidden = true
@@ -100,7 +99,13 @@ import AppKit
  unavailableOther.isAccessibilityUnavailable = true
  unavailableOther.isMinimizedStateKnown = false
  let offGroups = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible]), WindowGroup(space: second, windows: [unavailableOther])])
- precondition(offGroups.count == 2 && offGroups[1].windows.first?.id == 85)
+ precondition(offGroups.count == 3 && offGroups[1].windows.isEmpty)
+ precondition(offGroups.last?.space.id == DesktopSpace.otherWindowsID && offGroups.last?.windows.first?.id == 85)
+ unavailableOther.isExcludedFromSwitcher = true
+ unavailableOther.awaitsDesktopActivation = true
+ let deferredGroups = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible]), WindowGroup(space: second, windows: [unavailableOther])])
+ precondition(deferredGroups.count == 2 && deferredGroups[1].windows.first?.id == 85)
+ precondition(!unavailableOther.isEligibleForBulkOperations)
  precondition(!unavailableOther.isEligibleForBulkOperations && offDesktop.isEligibleForBulkOperations)
  precondition(offDesktop.cleanupCandidate(in: [unavailableOther], isProtected: { _ in false }) == nil)
  let moved = DesktopWindow(id: 85, ownerName: offDesktop.ownerName, title: offDesktop.title, bundleID: offDesktop.bundleID, pid: offDesktop.pid, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
@@ -113,18 +118,24 @@ import AppKit
  precondition(sharedGroups.map { $0.windows.count } == [1, 1])
  let unknownWindow = DesktopWindow(id: 86, ownerName: "Unknown", title: "Unknown", bundleID: "test.unknown", pid: 6, spaceID: 0, displayUUID: "", isOnScreen: false, isSticky: false, icon: nil)
  let unknownGroups = WindowSnapshot.overviewGroups([WindowGroup(space: unknown, windows: [unknownWindow])])
- precondition(unknownGroups.count == 1 && unknownGroups[0].space.id == 0)
+ precondition(unknownGroups.count == 1 && unknownGroups[0].space.id == DesktopSpace.otherWindowsID)
  precondition(!unknownWindow.isEligibleForBulkOperations)
  print("PASS: off-desktop and AX-unavailable windows retain ownership; bulk eligibility, restoration and unknown ownership remain independent")
  let unchanged = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible])])
  precondition(unchanged.count == 1 && unchanged[0].space.id == first.id && unchanged[0].windows.map(\.id) == [81])
- print("PASS: minimized and hidden windows move to one deduplicated trailing card while normal cards stay in place")
+ var special = visible
+ special.isExcludedFromSwitcher = true
+ let specialGroups = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [special, minimized]), WindowGroup(space: second, windows: [special, hidden])])
+ precondition(specialGroups.count == 3 && specialGroups.last?.space.id == DesktopSpace.otherWindowsID)
+ precondition(specialGroups.last?.windows.count == 1 && specialGroups.last?.windows.first?.id == special.id)
+ precondition(!special.isEligibleForBulkOperations)
+ print("PASS: switcher candidates including hidden/minimized stay on desktops; excluded and unknown windows deduplicate in final Other windows")
 
  Localization.language = "en"
  precondition(first.title == "Desktop 1")
  precondition(backgroundOnly.backgroundStateDescription.isEmpty)
  precondition(unknown.title == "Unknown ownership")
- precondition(DesktopSpace.backgroundWindowsSpace.title == "Hidden or minimized")
+ precondition(DesktopSpace.otherWindowsSpace.title == "Other windows")
  let external = DesktopSpace(id: 30, uuid: "third", displayUUID: "external", displayIndex: 1, index: 2, displayCount: 2, isCurrent: false)
  precondition(external.title == "Display 2 · Desktop 3")
  Localization.language = "zh-CN"

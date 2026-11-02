@@ -81,11 +81,11 @@ final class DesktopCardView: NSView, NSTableViewDataSource, NSTableViewDelegate 
  }
  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
  override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return [] }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID, group.space.id != DesktopSpace.otherWindowsID else { return [] }
   return sender.draggingPasteboard.string(forType: NSPasteboard.PasteboardType("local.macvirtualdesktophelper.window")) == nil ? [] : .move
  }
  override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return false }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID, group.space.id != DesktopSpace.otherWindowsID else { return false }
   guard let text = sender.draggingPasteboard.string(forType: NSPasteboard.PasteboardType("local.macvirtualdesktophelper.window")), let id = UInt32(text) else { return false }
   onDrop?(id, group.space.id)
   return true
@@ -137,12 +137,12 @@ final class DesktopCardView: NSView, NSTableViewDataSource, NSTableViewDelegate 
   return item
  }
  func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation operation: NSTableView.DropOperation) -> NSDragOperation {
-  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return [] }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID, group.space.id != DesktopSpace.otherWindowsID else { return [] }
   tableView.setDropRow(-1, dropOperation: .on)
   return .move
  }
  func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID else { return false }
+  guard group.space.id != 0, group.space.id != DesktopSpace.backgroundWindowsID, group.space.id != DesktopSpace.otherWindowsID else { return false }
   guard let text = info.draggingPasteboard.string(forType: NSPasteboard.PasteboardType("local.macvirtualdesktophelper.window")), let id = UInt32(text) else { return false }
   onDrop?(id, group.space.id)
   return true
