@@ -118,7 +118,7 @@ def upload_attachment(file_path: Path, upload_url: str) -> None:
             "curl", "--silent", "--show-error", "--location",
             "--connect-timeout", str(UPLOAD_CONNECT_TIMEOUT_SECS),
             "--max-time", str(UPLOAD_MAX_TIME_SECS),
-            "--retry", "2", "--fail-with-body", "--request", "POST", "-#",
+            "--retry", "2", "--fail", "--request", "POST", "-#",
             "--form", f"file=@{file_path}",
             upload_url,
         ],
