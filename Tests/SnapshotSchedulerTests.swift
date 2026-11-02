@@ -9,41 +9,48 @@ import Foundation
   precondition(!defaults.enabled && defaults.intervalMinutes == 30 && defaults.maximumCount == 3)
   try store.capture(name: "manual")
   let manualID = store.state.snapshots[0].id
-  let scheduler = SnapshotScheduler(store: store, secondsPerMinute: 0.2)
+  var timers: [Timer] = []
+  let scheduler = SnapshotScheduler(store: store, schedule: { timers.append($0) })
   scheduler.reload()
-  RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-  precondition(store.state.snapshots.map(\.id) == [manualID])
+  precondition(timers.isEmpty)
   try store.update { $0.snapshotSettings = SnapshotSettings(enabled: true, intervalMinutes: 1, maximumCount: 2) }
+  let beforeReload = Date()
   scheduler.reload()
+  let firstTimer = timers[0]
+  precondition(firstTimer.timeInterval == 60)
+  precondition(firstTimer.fireDate >= beforeReload.addingTimeInterval(60))
   precondition(store.state.snapshots.map(\.id) == [manualID])
-  RunLoop.main.run(until: Date().addingTimeInterval(0.12))
-  precondition(store.state.snapshots.map(\.id) == [manualID])
+  let beforeSecondReload = Date()
   scheduler.reload()
-  RunLoop.main.run(until: Date().addingTimeInterval(0.12))
+  precondition(!firstTimer.isValid && timers.count == 2)
+  let activeTimer = timers[1]
+  precondition(activeTimer.fireDate >= beforeSecondReload.addingTimeInterval(60))
   precondition(store.state.snapshots.map(\.id) == [manualID])
-  RunLoop.main.run(until: Date().addingTimeInterval(0.65))
+  for _ in 0..<4 { activeTimer.fire() }
   precondition(store.state.snapshots.filter(\.automatic).count == 2)
   precondition(store.state.snapshots.contains { $0.id == manualID })
   try store.update { $0.snapshotSettings?.enabled = false }
   scheduler.reload()
+  precondition(!activeTimer.isValid && timers.count == 2)
   let ids = store.state.snapshots.map(\.id)
-  RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+  activeTimer.fire()
   precondition(store.state.snapshots.map(\.id) == ids)
   let blockedURL = directory.appendingPathComponent("blocked")
   let retryStore = try RuleStore(url: blockedURL.appendingPathComponent("state.json"))
   try retryStore.update { $0.snapshotSettings = SnapshotSettings(enabled: true, intervalMinutes: 1, maximumCount: 2) }
   try FileManager.default.removeItem(at: blockedURL)
   try Data("blocked".utf8).write(to: blockedURL)
-  let retryScheduler = SnapshotScheduler(store: retryStore, secondsPerMinute: 0.1)
+  var retryTimer: Timer?
+  let retryScheduler = SnapshotScheduler(store: retryStore, schedule: { retryTimer = $0 })
   var failures = 0
   var captures = 0
   retryScheduler.failed = { _ in failures += 1 }
   retryScheduler.captured = { captures += 1 }
   retryScheduler.reload()
-  RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+  retryTimer!.fire()
   precondition(failures > 0 && captures == 0 && retryStore.state.snapshots.isEmpty)
   try FileManager.default.removeItem(at: blockedURL)
-  RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+  retryTimer!.fire()
   precondition(captures > 0 && !retryStore.state.snapshots.isEmpty)
   print("PASS: manual snapshot survives scheduled rotation; persistence failure reports without mutation and next interval retries")
   print("PASS: disabled default, full initial delay, reload resets delay, capture without UI, retention and stop")
