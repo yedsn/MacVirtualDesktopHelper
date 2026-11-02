@@ -28,6 +28,15 @@
       "request": "launch",
       "command": "./scripts/release/release.sh --push",
       "cwd": "${workspaceFolder}"
+    },
+    { "name":"----------ios-build---------", "command":"---------------------","request":"launch","type":"node-terminal"},
+
+    {
+      "name": "deploy-local：本地打包并部署到 Applications",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./scripts/deploy-local.sh",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }
