@@ -31,3 +31,5 @@ fi
 "$test_dir/list-keyboard"
 "${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/RuleStore.swift" "$sources/Models.swift" "$sources/WindowSwitcherSession.swift" Tests/WindowSwitcherTests.swift -o "$test_dir/window-switcher"
 "$test_dir/window-switcher"
+"${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/Models.swift" "$sources/AccessibilityWindowService.swift" Tests/WindowInspectionTests.swift -o "$test_dir/window-inspection"
+"$test_dir/window-inspection"

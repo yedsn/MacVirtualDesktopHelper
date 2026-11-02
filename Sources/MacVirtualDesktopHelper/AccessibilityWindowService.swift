@@ -122,26 +122,73 @@ final class AccessibilityWindowService {
   return getWindow(window, &id) == .success ? id : nil
  }
 
-	/// Returns the minimized window IDs owned by an application. `nil` means
-	/// accessibility could not inspect the application, not that no window is
-	/// minimized, so callers must keep their previous classification in that case.
-	func minimizedWindowIDs(pid: pid_t) -> Set<CGWindowID>? {
-		guard isTrusted, let getWindow else { return nil }
-		let application = AXUIElementCreateApplication(pid)
-		AXUIElementSetMessagingTimeout(application, 0.5)
-		var value: CFTypeRef?
-		guard AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &value) == .success,
-			let windows = value as? [AXUIElement] else { return nil }
-		var result = Set<CGWindowID>()
-		for window in windows {
-			var windowID: CGWindowID = 0
-			guard getWindow(window, &windowID) == .success else { continue }
-			var minimized: CFTypeRef?
-			guard AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &minimized) == .success,
-				let minimized, (minimized as? NSNumber)?.boolValue == true else { continue }
-			result.insert(windowID)
+	struct WindowDetails {
+		let title: String?
+		let isMinimized: Bool?
+		let isStandard: Bool?
+	}
+
+	struct WindowInspection {
+		let windows: [CGWindowID: WindowDetails]
+		let error: AXError?
+		let hasUnresolvedIDs: Bool
+
+		func presence(of id: CGWindowID) -> Bool? {
+			if windows[id] != nil { return true }
+			return error != nil || hasUnresolvedIDs ? nil : false
 		}
-		return result
+
+		func excludesBackgroundRecord(_ id: CGWindowID, isAccessoryApplication: Bool, isOnCurrentSpace: Bool, isOnScreen: Bool, isApplicationHidden: Bool) -> Bool {
+			// Accessory apps can retain ordered-out panels in CG/Space lists. Only
+			// discard with positive current-Space evidence and a complete AX query.
+			isAccessoryApplication && isOnCurrentSpace && !isOnScreen && !isApplicationHidden && presence(of: id) == false
+		}
+
+		func apply(to window: inout DesktopWindow) {
+			let details = windows[window.id]
+			window.isAccessibilityUnavailable = details == nil
+			window.isMinimizedStateKnown = details?.isMinimized != nil
+			window.isMinimized = details?.isMinimized == true
+		}
+	}
+
+	/// One bounded application-level query per capture. Missing objects and failed
+	/// attributes carry no evidence that an off-desktop window is hidden or closed.
+	func inspectWindows(pid: pid_t) -> WindowInspection {
+		guard isTrusted, let getWindow else {
+			return WindowInspection(windows: [:], error: .apiDisabled, hasUnresolvedIDs: false)
+		}
+		let application = AXUIElementCreateApplication(pid)
+		AXUIElementSetMessagingTimeout(application, 0.3)
+		var value: CFTypeRef?
+		let result = AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &value)
+		guard result == .success, let windows = value as? [AXUIElement] else {
+			return WindowInspection(windows: [:], error: result == .success ? .failure : result, hasUnresolvedIDs: false)
+		}
+		var details: [CGWindowID: WindowDetails] = [:]
+		var unresolved = false
+		let deadline = Date().addingTimeInterval(0.8)
+		for window in windows {
+			guard Date() < deadline else {
+				return WindowInspection(windows: details, error: .cannotComplete, hasUnresolvedIDs: true)
+			}
+			AXUIElementSetMessagingTimeout(window, 0.1)
+			var id: CGWindowID = 0
+			guard getWindow(window, &id) == .success else { unresolved = true; continue }
+			func attribute(_ name: CFString) -> CFTypeRef? {
+				var value: CFTypeRef?
+				return AXUIElementCopyAttributeValue(window, name, &value) == .success ? value : nil
+			}
+			let title = attribute(kAXTitleAttribute as CFString) as? String
+			let minimized = (attribute(kAXMinimizedAttribute as CFString) as? NSNumber)?.boolValue
+			let role = attribute(kAXRoleAttribute as CFString) as? String
+			let subrole = attribute(kAXSubroleAttribute as CFString) as? String
+			let standard = role.map { role in
+				role == kAXWindowRole as String && (subrole == nil || [kAXStandardWindowSubrole as String, kAXDialogSubrole as String, kAXSystemDialogSubrole as String].contains(subrole!))
+			}
+			details[id] = WindowDetails(title: title, isMinimized: minimized, isStandard: standard)
+		}
+		return WindowInspection(windows: details, error: nil, hasUnresolvedIDs: unresolved)
 	}
 
 	func close(_ target: DesktopWindow) -> String? {

@@ -429,7 +429,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 		focusButton.isEnabled = window != nil && !bulkRunning
 		closeButton.isEnabled = window != nil && !bulkRunning
 		moveButton.isEnabled = !bulkRunning && window != nil && window?.isSticky == false && (snapshot?.spaces.count ?? 0) > 1
-		let cleanupWindows = uniqueWindows.filter { !$0.belongsToBackgroundSection }
+		let cleanupWindows = uniqueWindows.filter { $0.isEligibleForBulkOperations }
 		cleanupButton.title = "一键清理 (".localized + String(cleanupWindows.filter { !isCleanupLocked($0) }.count) + ")"
 		cleanupButton.contentTintColor = cleanupWindows.contains(where: { !isCleanupLocked($0) }) ? NSColor(srgbRed: 178.0 / 255, green: 34.0 / 255, blue: 34.0 / 255, alpha: 1) : .controlTextColor
   cleanupButton.attributedTitle = NSAttributedString(string: cleanupButton.title, attributes: [.foregroundColor: cleanupButton.contentTintColor ?? NSColor.controlTextColor, .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)])
@@ -457,7 +457,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 
  private var ruleWindows: [RuleWindowIdentity] {
   uniqueWindows.compactMap { item in
-			guard !item.isSticky, !item.belongsToBackgroundSection,
+			guard !item.isSticky, item.isEligibleForBulkOperations,
 				let space = snapshot?.spaces.first(where: { $0.id == item.spaceID }) else { return nil }
    return RuleWindowIdentity(id: item.id, bundleID: item.bundleID, applicationPath: NSRunningApplication(processIdentifier: item.pid)?.bundleURL?.path ?? "", title: item.title, spaceUUID: space.uuid, displayUUID: space.displayUUID, desktopIndex: space.index)
   }
@@ -532,7 +532,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    let rule = ruleStore.state.desktopRules.first(where: { DesktopRuleMatcher.uniqueWindow(for: $0, rules: ruleStore.state.desktopRules, windows: identities)?.id == current.id }),
    let approved = approvedRules.first(where: { $0.id == rule.id }),
    DesktopRuleChange(windowID: candidate.id, rule: approved, isNew: false).agrees(with: DesktopRuleChange(windowID: candidate.id, rule: rule, isNew: false)),
-   let target = targetSpace(rule), !live.isSticky else {
+   let target = targetSpace(rule), !live.isSticky, live.spaceID == candidate.spaceID else {
    ApplicationLog.write("Rule application skipped: candidate revalidation failed, window=" + String(candidate.id))
    DispatchQueue.main.async { [weak self] in self?.applyNext(Array(candidates.dropFirst()), approvedRules: approvedRules, moved: moved, failed: failed + 1) }; return
   }
@@ -607,7 +607,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   // as new candidates. Keep this list consistent with the one-click cleanup
   // candidate filter and re-evaluate protection from the current rule store.
   let candidates = uniqueWindows.filter { item in
-   item.hasKnownSpace && !item.belongsToBackgroundSection && !isCleanupLocked(item)
+   item.isEligibleForBulkOperations && !isCleanupLocked(item)
   }
   guard !candidates.isEmpty else {
    setStatus("所有已知窗口均已存在锁定规则。".localized)
@@ -619,7 +619,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   let validWindows = windows.filter { preview in
    currentWindows.contains { live in
     live.id == preview.id && live.pid == preview.pid && live.bundleID == preview.bundleID &&
-    live.title == preview.title && live.hasKnownSpace
+    live.title == preview.title && live.spaceID == preview.spaceID && live.isEligibleForBulkOperations && !isCleanupLocked(live)
    }
   }
   var added = 0
@@ -649,7 +649,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    setStatus("请先授予辅助功能及窗口标题读取权限。".localized, isError: true); return
   }
   snapshot = catalog.snapshot()
-		let candidates = uniqueWindows.filter { !$0.belongsToBackgroundSection && !isCleanupLocked($0) }
+		let candidates = uniqueWindows.filter { $0.isEligibleForBulkOperations && !isCleanupLocked($0) }
   guard !candidates.isEmpty else { setStatus("所有桌面均无未保护窗口。".localized); return }
   guard let reviewed = windowReview.confirm(title: "一键清理".localized, windows: candidates, action: "确认清理".localized) else { return }
   bulkRunning = true
@@ -816,14 +816,24 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 		refreshInBackground()
 	}
 
+	private func revalidatedWindow(_ target: DesktopWindow) -> DesktopWindow? {
+		let infos = CGWindowListCopyWindowInfo(.optionIncludingWindow, target.id) as? [[String: Any]] ?? []
+		guard NSRunningApplication(processIdentifier: target.pid)?.bundleIdentifier == target.bundleID,
+			infos.contains(where: {
+				($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == target.id &&
+				($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == target.pid
+			}) else { return nil }
+		return target
+	}
+
 	@objc private func movePressed() {
   guard !bulkRunning, !loading else { return }
 		guard let window = selectedWindow else {
 			setStatus("请先选择一个窗口。".localized, isError: true)
 			return
 		}
-		if window.isAccessibilityUnavailable {
-			setStatus("该后台窗口未提供辅助功能接口，无法激活；请从应用自身菜单或图标打开。".localized, isError: true)
+		guard let live = revalidatedWindow(window), accessibility.windowIdentity(live) != nil else {
+			setStatus("暂时无法操作".localized, isError: true)
 			return
 		}
 		guard !window.isSticky, window.hasKnownSpace else {
@@ -867,7 +877,8 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 		}
 		waitForDesktop(target.spaceID, required: needsSwitch) { [weak self] in
 			guard let self else { return }
-			if let error = self.accessibility.close(target) {
+			guard let live = self.revalidatedWindow(target) else { self.setStatus("暂时无法操作".localized, isError: true); return }
+			if let error = self.accessibility.close(live) {
     self.refresh()
 				self.setStatus(error, isError: true)
 				return
@@ -904,7 +915,8 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 		}
 		waitForDesktop(window.spaceID, required: needsSwitch) { [weak self] in
 			guard let self else { return }
-			if let error = self.accessibility.focus(window) {
+			guard let live = self.revalidatedWindow(window) else { self.setStatus("暂时无法操作".localized, isError: true); return }
+			if let error = self.accessibility.focus(live, activateAllWindows: false) {
 				self.setStatus(error, isError: true)
 			} else {
     self.verifyActivation(window, hideAfter: hideAfter)

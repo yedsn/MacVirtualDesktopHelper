@@ -40,9 +40,9 @@ struct DesktopWindow: Identifiable {
 	let isSticky: Bool
 	let icon: NSImage?
 	var isMinimized = false
+	var isMinimizedStateKnown = true
 	var isApplicationHidden = false
-	/// The window is present in CoreGraphics but its owning app does not expose
-	/// an Accessibility window object (common for menu-bar/background apps).
+	/// This capture could not resolve an Accessibility object; not proof of hiding or closure.
 	var isAccessibilityUnavailable = false
 
 	var displayTitle: String {
@@ -50,14 +50,15 @@ struct DesktopWindow: Identifiable {
 		return trimmed.isEmpty ? "（无标题窗口）".localized : trimmed
 	}
  var hasKnownSpace: Bool { spaceID != 0 }
-	var belongsToBackgroundSection: Bool { isMinimized || isApplicationHidden || isAccessibilityUnavailable }
+	var belongsToBackgroundSection: Bool { isMinimized || isApplicationHidden }
+	var isEligibleForBulkOperations: Bool { hasKnownSpace && !belongsToBackgroundSection && !isAccessibilityUnavailable && isMinimizedStateKnown }
 	var backgroundStateDescription: String {
-		[isMinimized ? "已最小化".localized : nil, isApplicationHidden ? "应用已隐藏".localized : nil, isAccessibilityUnavailable ? "后台窗口".localized : nil]
+		[isMinimized ? "已最小化".localized : nil, isApplicationHidden ? "应用已隐藏".localized : nil]
 			.compactMap { $0 }.joined(separator: " · ")
 	}
  func cleanupCandidate(in windows: [DesktopWindow], isProtected: (DesktopWindow) -> Bool) -> DesktopWindow? {
   guard let live = windows.first(where: { $0.id == id && $0.pid == pid && $0.bundleID == bundleID && $0.title == title }),
-   live.hasKnownSpace, !isProtected(live) else { return nil }
+   live.isEligibleForBulkOperations, live.spaceID == spaceID, live.isSticky == isSticky, !isProtected(live) else { return nil }
   return live
  }
 }

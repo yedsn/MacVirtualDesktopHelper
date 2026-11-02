@@ -91,15 +91,38 @@ import AppKit
  precondition(mixed.backgroundStateDescription == "已最小化 · 应用已隐藏")
  var backgroundOnly = visible
  backgroundOnly.isAccessibilityUnavailable = true
- precondition(backgroundOnly.belongsToBackgroundSection)
- precondition(backgroundOnly.backgroundStateDescription == "后台窗口")
- precondition(![backgroundOnly].filter { !$0.belongsToBackgroundSection }.contains(where: { _ in true }))
+ precondition(!backgroundOnly.belongsToBackgroundSection)
+ precondition(backgroundOnly.backgroundStateDescription.isEmpty)
+ precondition(!backgroundOnly.isEligibleForBulkOperations)
+ precondition(visible.cleanupCandidate(in: [backgroundOnly], isProtected: { _ in false }) == nil)
+ let offDesktop = DesktopWindow(id: 85, ownerName: "Other", title: "Off desktop", bundleID: "test.other", pid: 5, spaceID: 20, displayUUID: "display", isOnScreen: false, isSticky: false, icon: nil)
+ var unavailableOther = offDesktop
+ unavailableOther.isAccessibilityUnavailable = true
+ unavailableOther.isMinimizedStateKnown = false
+ let offGroups = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible]), WindowGroup(space: second, windows: [unavailableOther])])
+ precondition(offGroups.count == 2 && offGroups[1].windows.first?.id == 85)
+ precondition(!unavailableOther.isEligibleForBulkOperations && offDesktop.isEligibleForBulkOperations)
+ precondition(offDesktop.cleanupCandidate(in: [unavailableOther], isProtected: { _ in false }) == nil)
+ let moved = DesktopWindow(id: 85, ownerName: offDesktop.ownerName, title: offDesktop.title, bundleID: offDesktop.bundleID, pid: offDesktop.pid, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
+ precondition(offDesktop.cleanupCandidate(in: [moved], isProtected: { _ in false }) == nil)
+ var restored = hidden
+ restored.isApplicationHidden = false
+ let restoredGroups = WindowSnapshot.overviewGroups([WindowGroup(space: second, windows: [restored])])
+ precondition(restoredGroups.count == 1 && restoredGroups[0].windows.first?.id == 83)
+ let sharedGroups = WindowSnapshot.overviewGroups(snapshot.groups)
+ precondition(sharedGroups.map { $0.windows.count } == [1, 1])
+ let unknownWindow = DesktopWindow(id: 86, ownerName: "Unknown", title: "Unknown", bundleID: "test.unknown", pid: 6, spaceID: 0, displayUUID: "", isOnScreen: false, isSticky: false, icon: nil)
+ let unknownGroups = WindowSnapshot.overviewGroups([WindowGroup(space: unknown, windows: [unknownWindow])])
+ precondition(unknownGroups.count == 1 && unknownGroups[0].space.id == 0)
+ precondition(!unknownWindow.isEligibleForBulkOperations)
+ print("PASS: off-desktop and AX-unavailable windows retain ownership; bulk eligibility, restoration and unknown ownership remain independent")
  let unchanged = WindowSnapshot.overviewGroups([WindowGroup(space: first, windows: [visible])])
  precondition(unchanged.count == 1 && unchanged[0].space.id == first.id && unchanged[0].windows.map(\.id) == [81])
  print("PASS: minimized and hidden windows move to one deduplicated trailing card while normal cards stay in place")
 
  Localization.language = "en"
  precondition(first.title == "Desktop 1")
+ precondition(backgroundOnly.backgroundStateDescription.isEmpty)
  precondition(unknown.title == "Unknown ownership")
  precondition(DesktopSpace.backgroundWindowsSpace.title == "Hidden or minimized")
  let external = DesktopSpace(id: 30, uuid: "third", displayUUID: "external", displayIndex: 1, index: 2, displayCount: 2, isCurrent: false)

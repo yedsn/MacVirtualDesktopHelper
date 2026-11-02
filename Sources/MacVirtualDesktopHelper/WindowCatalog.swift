@@ -42,15 +42,15 @@ final class WindowCatalog {
 		let windowInfo = cgWindowInfo()
 		let currentPID = ProcessInfo.processInfo.processIdentifier
 		let accessibility = AccessibilityWindowService()
-		var minimizedWindowIDsByPID: [pid_t: Set<CGWindowID>?] = [:]
+		var inspections: [pid_t: AccessibilityWindowService.WindowInspection] = [:]
 		var seenWindowIDs = Set<CGWindowID>()
 		var windowsBySpace: [UInt64: [DesktopWindow]] = [:]
 
-		func minimizedWindowIDs(for pid: pid_t) -> Set<CGWindowID>? {
-			if let cached = minimizedWindowIDsByPID[pid] { return cached }
-			let detected = accessibility.minimizedWindowIDs(pid: pid)
-			minimizedWindowIDsByPID[pid] = detected
-			return detected
+		func inspection(for pid: pid_t) -> AccessibilityWindowService.WindowInspection {
+			if let cached = inspections[pid] { return cached }
+			let result = accessibility.inspectWindows(pid: pid)
+			inspections[pid] = result
+			return result
 		}
 
 		for space in spaces where requestedSpaceID == nil || space.id == requestedSpaceID {
@@ -79,7 +79,7 @@ final class WindowCatalog {
 					?? "未知应用"
 				let reportedTitle = stringValue(info[kCGWindowName as String]) ?? ""
 				let title = reportedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-					? (accessibility.windowTitle(windowID: windowID, pid: pid) ?? reportedTitle) : reportedTitle
+					? (inspection(for: pid).windows[windowID]?.title ?? reportedTitle) : reportedTitle
 				var window = DesktopWindow(
 					id: windowID,
 					ownerName: ownerName,
@@ -92,10 +92,13 @@ final class WindowCatalog {
 					isSticky: isSticky,
 					icon: app?.icon
 				)
-				window.isMinimized = minimizedWindowIDs(for: pid)?.contains(windowID) ?? false
+				inspection(for: pid).apply(to: &window)
 				window.isApplicationHidden = app?.isHidden ?? false
-				window.isAccessibilityUnavailable = !accessibility.containsWindow(window)
-				if requestedSpaceID != nil, !window.isAccessibilityUnavailable, !accessibility.isStandardWindow(window) { continue }
+				if inspection(for: pid).excludesBackgroundRecord(windowID,
+					isAccessoryApplication: app?.activationPolicy == .accessory,
+					isOnCurrentSpace: spaces.contains { $0.isCurrent && associatedSpaceIDs.contains($0.id) },
+					isOnScreen: window.isOnScreen, isApplicationHidden: window.isApplicationHidden) { continue }
+				if requestedSpaceID != nil, inspection(for: pid).windows[windowID]?.isStandard == false { continue }
 				for memberSpaceID in associatedSpaceIDs {
 					windowsBySpace[memberSpaceID, default: []].append(window)
 				}
@@ -120,9 +123,9 @@ final class WindowCatalog {
     let pid = int32Value(info[kCGWindowOwnerPID as String]) ?? 0
     let app = NSRunningApplication(processIdentifier: pid)
     var item = DesktopWindow(id: windowID, ownerName: stringValue(info[kCGWindowOwnerName as String]) ?? app?.localizedName ?? "未知应用", title: stringValue(info[kCGWindowName as String]) ?? "", bundleID: app?.bundleIdentifier ?? "", pid: pid, spaceID: 0, displayUUID: "", isOnScreen: boolValue(info[kCGWindowIsOnscreen as String]) ?? false, isSticky: false, icon: app?.icon)
-    item.isMinimized = minimizedWindowIDs(for: pid)?.contains(windowID) ?? false
+    inspection(for: pid).apply(to: &item)
     item.isApplicationHidden = app?.isHidden ?? false
-    if accessibility.containsWindow(item) { unknown.append(item) }
+    if inspection(for: pid).presence(of: windowID) == true { unknown.append(item) }
    }
    if !unknown.isEmpty {
     let unassigned = DesktopSpace(id: 0, uuid: "unassigned", displayUUID: "", displayIndex: 0, index: -1, displayCount: 0, isCurrent: false)
