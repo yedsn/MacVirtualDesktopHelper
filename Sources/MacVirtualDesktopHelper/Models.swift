@@ -60,14 +60,19 @@ struct DesktopWindow: Identifiable {
 	}
  var hasKnownSpace: Bool { spaceID != 0 }
 	var belongsToBackgroundSection: Bool { isMinimized || isApplicationHidden }
+	var isOverviewDesktopCandidate: Bool {
+		hasKnownSpace && (awaitsDesktopActivation || (!isExcludedFromSwitcher && !isAccessibilityUnavailable))
+	}
 	var isEligibleForBulkOperations: Bool { hasKnownSpace && !isExcludedFromSwitcher && !belongsToBackgroundSection && !isAccessibilityUnavailable && isMinimizedStateKnown }
+	var isDesktopRuleUpdateCandidate: Bool { isOverviewDesktopCandidate && !isSticky }
 	var backgroundStateDescription: String {
 		[isMinimized ? "已最小化".localized : nil, isApplicationHidden ? "应用已隐藏".localized : nil]
 			.compactMap { $0 }.joined(separator: " · ")
 	}
- func cleanupCandidate(in windows: [DesktopWindow], isProtected: (DesktopWindow) -> Bool) -> DesktopWindow? {
+ func cleanupCandidate(in windows: [DesktopWindow], requiresOperationAccess: Bool = true, isProtected: (DesktopWindow) -> Bool) -> DesktopWindow? {
   guard let live = windows.first(where: { $0.id == id && $0.pid == pid && $0.bundleID == bundleID && $0.title == title }),
-   live.isEligibleForBulkOperations, live.spaceID == spaceID, live.isSticky == isSticky, !isProtected(live) else { return nil }
+   live.isOverviewDesktopCandidate, live.spaceID == spaceID, live.isSticky == isSticky, !isProtected(live) else { return nil }
+  if requiresOperationAccess && (live.isExcludedFromSwitcher || live.isAccessibilityUnavailable || !live.isMinimizedStateKnown) { return nil }
   return live
  }
 }
@@ -95,7 +100,7 @@ struct WindowSnapshot {
 		for group in groups {
 			var candidates: [DesktopWindow] = []
 			for window in group.windows {
-				if !window.hasKnownSpace || ((window.isExcludedFromSwitcher || window.isAccessibilityUnavailable) && !window.awaitsDesktopActivation) {
+				if !window.isOverviewDesktopCandidate {
 					other[window.id] = window
 				} else { candidates.append(window) }
 			}

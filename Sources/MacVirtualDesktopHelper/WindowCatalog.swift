@@ -3,6 +3,14 @@ import CoreGraphics
 
 final class WindowCatalog {
 	private let skyLight: SkyLightService
+	private var confirmedClosed: [CGWindowID: pid_t] = [:]
+	private let closureLock = NSLock()
+
+	func recordConfirmedClosure(_ window: DesktopWindow) {
+		closureLock.lock()
+		defer { closureLock.unlock() }
+		confirmedClosed[window.id] = window.pid
+	}
 	private let systemBundleIdentifiers: Set<String> = [
 		"com.apple.dock",
 		"com.apple.controlcenter",
@@ -40,6 +48,10 @@ final class WindowCatalog {
 		let currentSpaceID = spaces.first(where: { $0.isCurrent })?.id
 		let spaceIDs = Set(spaces.map(\.id))
 		let windowInfo = cgWindowInfo()
+		closureLock.lock()
+		confirmedClosed = confirmedClosed.filter { windowInfo[$0.key] != nil }
+		let closedRecords = confirmedClosed
+		closureLock.unlock()
 		let currentPID = ProcessInfo.processInfo.processIdentifier
 		let accessibility = AccessibilityWindowService()
 		var inspections: [pid_t: AccessibilityWindowService.WindowInspection] = [:]
@@ -57,6 +69,12 @@ final class WindowCatalog {
 		for space in spaces where requestedSpaceID == nil || space.id == requestedSpaceID {
 			for windowID in skyLight.windowIDs(on: space.id) where !seenWindowIDs.contains(windowID) {
 				guard let info = windowInfo[windowID] else { continue }
+				if let pid = closedRecords[windowID] {
+					if int32Value(info[kCGWindowOwnerPID as String]) == pid, inspection(for: pid).presence(of: windowID) != true { continue }
+					closureLock.lock()
+					confirmedClosed.removeValue(forKey: windowID)
+					closureLock.unlock()
+				}
 				guard shouldInclude(info: info, currentPID: currentPID, includeSmallWindows: true) else { continue }
 
 				let associatedSpaceIDs = skyLight.spaceIDs(for: windowID).filter { spaceIDs.contains($0) }

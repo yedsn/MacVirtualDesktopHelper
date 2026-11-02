@@ -429,7 +429,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 		focusButton.isEnabled = window != nil && !bulkRunning
 		closeButton.isEnabled = window != nil && !bulkRunning
 		moveButton.isEnabled = !bulkRunning && window != nil && window?.isSticky == false && (snapshot?.spaces.count ?? 0) > 1
-		let cleanupWindows = uniqueWindows.filter { $0.isEligibleForBulkOperations }
+		let cleanupWindows = uniqueWindows.filter { $0.isOverviewDesktopCandidate }
 		cleanupButton.title = "一键清理 (".localized + String(cleanupWindows.filter { !isCleanupLocked($0) }.count) + ")"
 		cleanupButton.contentTintColor = cleanupWindows.contains(where: { !isCleanupLocked($0) }) ? NSColor(srgbRed: 178.0 / 255, green: 34.0 / 255, blue: 34.0 / 255, alpha: 1) : .controlTextColor
   cleanupButton.attributedTitle = NSAttributedString(string: cleanupButton.title, attributes: [.foregroundColor: cleanupButton.contentTintColor ?? NSColor.controlTextColor, .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)])
@@ -455,9 +455,9 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   lockEditor?.showWindow(nil)
  }
 
- private var ruleWindows: [RuleWindowIdentity] {
+ private func ruleWindows(forUpdate: Bool = false) -> [RuleWindowIdentity] {
   uniqueWindows.compactMap { item in
-			guard !item.isSticky, item.isEligibleForBulkOperations,
+			guard !item.isSticky, (forUpdate ? item.isDesktopRuleUpdateCandidate : item.isEligibleForBulkOperations),
 				let space = snapshot?.spaces.first(where: { $0.id == item.spaceID }) else { return nil }
    return RuleWindowIdentity(id: item.id, bundleID: item.bundleID, applicationPath: NSRunningApplication(processIdentifier: item.pid)?.bundleURL?.path ?? "", title: item.title, spaceUUID: space.uuid, displayUUID: space.displayUUID, desktopIndex: space.index)
   }
@@ -498,7 +498,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard let ruleStore else { setStatus("规则状态不可用，无法应用桌面规则。".localized, isError: true); return }
   guard CGPreflightScreenCaptureAccess() else { setStatus("请先授予屏幕录制权限，以读取标题并匹配桌面规则。".localized, isError: true); return }
   snapshot = catalog.snapshot()
-  let identities = ruleWindows
+  let identities = ruleWindows()
   let missingTargets = ruleStore.state.desktopRules.filter { targetSpace($0) == nil }.count
   let movable = ruleStore.state.desktopRules.compactMap { rule -> DesktopWindow? in
    guard let match = DesktopRuleMatcher.uniqueWindow(for: rule, rules: ruleStore.state.desktopRules, windows: identities),
@@ -526,7 +526,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    setStatus("规则应用完成：移动 ".localized + String(moved) + " 个，跳过或失败 ".localized + String(failed) + " 个。".localized); return
   }
   setStatus("正在应用桌面规则：已处理 ".localized + String(moved + failed) + " 个，剩余 ".localized + String(candidates.count) + " 个…".localized)
-  let identities = ruleWindows
+  let identities = ruleWindows()
   guard let current = identities.first(where: { $0.id == candidate.id }),
    let live = uniqueWindows.first(where: { $0.id == candidate.id && $0.pid == candidate.pid && $0.bundleID == candidate.bundleID && $0.title == candidate.title }),
    let rule = ruleStore.state.desktopRules.first(where: { DesktopRuleMatcher.uniqueWindow(for: $0, rules: ruleStore.state.desktopRules, windows: identities)?.id == current.id }),
@@ -566,7 +566,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard let ruleStore else { setStatus("规则状态不可用，无法更新桌面规则。".localized, isError: true); return }
   guard CGPreflightScreenCaptureAccess() else { setStatus("请先授予屏幕录制权限，以读取标题并更新桌面规则。".localized, isError: true); return }
   snapshot = catalog.snapshot()
-  let update = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows)
+  let update = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows(forUpdate: true))
   let ids = Set(update.changes.map(\.windowID))
   guard !ids.isEmpty else {
    setStatus("无需更新；存在歧义的窗口：".localized + String(update.ambiguousWindowIDs.count)); return
@@ -579,7 +579,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard let reviewed = windowReview.confirm(title: "检查桌面规则更改".localized, windows: uniqueWindows.filter { ids.contains($0.id) }, action: "保存桌面规则".localized, details: previewDetails) else { return }
   let accepted = Set(reviewed.map(\.id))
   snapshot = catalog.snapshot()
-  let currentUpdate = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows)
+  let currentUpdate = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows(forUpdate: true))
   let validChanges = update.changes.filter { original in
    guard accepted.contains(original.windowID),
     let live = uniqueWindows.first(where: { $0.id == original.windowID }),
@@ -607,7 +607,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   // as new candidates. Keep this list consistent with the one-click cleanup
   // candidate filter and re-evaluate protection from the current rule store.
   let candidates = uniqueWindows.filter { item in
-   item.isEligibleForBulkOperations && !isCleanupLocked(item)
+   item.isOverviewDesktopCandidate && !isCleanupLocked(item)
   }
   guard !candidates.isEmpty else {
    setStatus("所有已知窗口均已存在锁定规则。".localized)
@@ -619,7 +619,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   let validWindows = windows.filter { preview in
    currentWindows.contains { live in
     live.id == preview.id && live.pid == preview.pid && live.bundleID == preview.bundleID &&
-    live.title == preview.title && live.spaceID == preview.spaceID && live.isEligibleForBulkOperations && !isCleanupLocked(live)
+    live.title == preview.title && live.spaceID == preview.spaceID && live.isOverviewDesktopCandidate && !isCleanupLocked(live)
    }
   }
   var added = 0
@@ -649,7 +649,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    setStatus("请先授予辅助功能及窗口标题读取权限。".localized, isError: true); return
   }
   snapshot = catalog.snapshot()
-		let candidates = uniqueWindows.filter { $0.isEligibleForBulkOperations && !isCleanupLocked($0) }
+		let candidates = uniqueWindows.filter { $0.isOverviewDesktopCandidate && !isCleanupLocked($0) }
   guard !candidates.isEmpty else { setStatus("所有桌面均无未保护窗口。".localized); return }
   guard let reviewed = windowReview.confirm(title: "一键清理".localized, windows: candidates, action: "确认清理".localized) else { return }
   bulkRunning = true
@@ -666,10 +666,10 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
    return
   }
   setStatus("正在清理：已关闭 ".localized + String(closed) + " 个，等待响应 ".localized + String(remaining) + " 个，跳过或失败 ".localized + String(failed) + " 个，剩余 ".localized + String(candidates.count) + " 个…".localized)
-  guard let current = item.cleanupCandidate(in: uniqueWindows, isProtected: isCleanupLocked) else {
+  guard let current = item.cleanupCandidate(in: uniqueWindows, requiresOperationAccess: false, isProtected: isCleanupLocked) else {
    DispatchQueue.main.async { [weak self] in self?.closeNext(Array(candidates.dropFirst()), closed: closed, remaining: remaining, failed: failed + 1) }; return
   }
-		let needsSwitch = !current.belongsToBackgroundSection && !current.isSticky && !skyLight.spaces().contains { $0.id == current.spaceID && $0.isCurrent }
+		let needsSwitch = !current.isSticky && !skyLight.spaces().contains { $0.id == current.spaceID && $0.isCurrent }
   if needsSwitch { skyLight.setCurrentSpace(displayUUID: current.displayUUID, spaceID: current.spaceID) }
   waitForDesktop(current.spaceID, required: needsSwitch, onFailure: { [weak self] in
    self?.closeNext(Array(candidates.dropFirst()), closed: closed, remaining: remaining, failed: failed + 1)
@@ -684,6 +684,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
     guard let self else { return }
     self.snapshot = self.catalog.snapshot()
     let presence = error == nil ? self.accessibility.windowPresence(current) : nil
+    if presence == false { self.catalog.recordConfirmedClosure(current) }
     self.closeNext(Array(candidates.dropFirst()), closed: closed + (presence == false ? 1 : 0), remaining: remaining + (presence == true ? 1 : 0), failed: failed + (presence == nil ? 1 : 0))
    }
   }
@@ -886,6 +887,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
 			DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
 				guard let self else { return }
 				let exists = self.accessibility.windowPresence(target)
+				if exists == false { self.catalog.recordConfirmedClosure(target) }
 				self.refresh()
     if let exists {
      self.setStatus(exists ? "已请求关闭；窗口仍存在，请检查保存提示或应用响应。".localized : "已关闭“\(target.ownerName)”的所选窗口。")

@@ -108,6 +108,19 @@ import AppKit
  precondition(!unavailableOther.isEligibleForBulkOperations)
  precondition(!unavailableOther.isEligibleForBulkOperations && offDesktop.isEligibleForBulkOperations)
  precondition(offDesktop.cleanupCandidate(in: [unavailableOther], isProtected: { _ in false }) == nil)
+ precondition(unavailableOther.isOverviewDesktopCandidate)
+ precondition(unavailableOther.isDesktopRuleUpdateCandidate)
+ precondition(hidden.isDesktopRuleUpdateCandidate && minimized.isDesktopRuleUpdateCandidate)
+ precondition(!window.isDesktopRuleUpdateCandidate) // shared windows have no unique rule target
+ precondition(offDesktop.cleanupCandidate(in: [unavailableOther], requiresOperationAccess: false, isProtected: { _ in false }) != nil)
+ precondition(offDesktop.cleanupCandidate(in: [unavailableOther], requiresOperationAccess: false, isProtected: { _ in true }) == nil)
+ precondition(unavailableOther.cleanupCandidate(in: [offDesktop], isProtected: { _ in false }) != nil)
+ precondition(minimized.isOverviewDesktopCandidate && hidden.isOverviewDesktopCandidate)
+ precondition(minimized.cleanupCandidate(in: [minimized], isProtected: { _ in false }) != nil)
+ precondition(hidden.cleanupCandidate(in: [hidden], isProtected: { _ in false }) != nil)
+ var failedAfterSwitch = unavailableOther
+ failedAfterSwitch.awaitsDesktopActivation = false
+ precondition(unavailableOther.cleanupCandidate(in: [failedAfterSwitch], isProtected: { _ in false }) == nil)
  let moved = DesktopWindow(id: 85, ownerName: offDesktop.ownerName, title: offDesktop.title, bundleID: offDesktop.bundleID, pid: offDesktop.pid, spaceID: 10, displayUUID: "display", isOnScreen: true, isSticky: false, icon: nil)
  precondition(offDesktop.cleanupCandidate(in: [moved], isProtected: { _ in false }) == nil)
  var restored = hidden
@@ -129,6 +142,7 @@ import AppKit
  precondition(specialGroups.count == 3 && specialGroups.last?.space.id == DesktopSpace.otherWindowsID)
  precondition(specialGroups.last?.windows.count == 1 && specialGroups.last?.windows.first?.id == special.id)
  precondition(!special.isEligibleForBulkOperations)
+ precondition(!special.isDesktopRuleUpdateCandidate && !unknownWindow.isDesktopRuleUpdateCandidate)
  print("PASS: switcher candidates including hidden/minimized stay on desktops; excluded and unknown windows deduplicate in final Other windows")
 
  Localization.language = "en"
