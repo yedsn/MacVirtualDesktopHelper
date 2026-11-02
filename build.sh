@@ -2,7 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/.build"
+# WVDH_ARCH and WVDH_BUILD_DIR let the release scripts build one architecture at
+# a time into separate directories without changing the local defaults.
+ARCH="${WVDH_ARCH:-arm64}"
+BUILD_DIR="${WVDH_BUILD_DIR:-$SCRIPT_DIR/.build}"
 APP_DIR="$BUILD_DIR/MacVirtualDesktopHelper.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -27,9 +30,9 @@ else
 	CLANG=("$CLT_BIN/clang")
 fi
 
-"${CLANG[@]}" -target arm64-apple-macos13.0 -fobjc-arc -O2 -c "$SCRIPT_DIR/Native/SkyLightBridge.m" -o "$BUILD_DIR/SkyLightBridge.o"
+"${CLANG[@]}" -target "$ARCH-apple-macos13.0" -fobjc-arc -O2 -c "$SCRIPT_DIR/Native/SkyLightBridge.m" -o "$BUILD_DIR/SkyLightBridge.o"
 
-"${SWIFTC[@]}" -target arm64-apple-macos13.0 \
+"${SWIFTC[@]}" -target "$ARCH-apple-macos13.0" \
 	-swift-version 5 \
 	-O \
 	-framework AppKit \
@@ -48,7 +51,11 @@ if [[ -z "$SIGN_IDENTITY" ]]; then
 fi
 
 if [[ -n "$SIGN_IDENTITY" ]]; then
-	codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_DIR"
+	if [[ "$SIGN_IDENTITY" == "Developer ID Application:"* ]]; then
+		codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_DIR"
+	else
+		codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_DIR"
+	fi
 else
 	echo "warning: no code signing identity found, falling back to an ad hoc signature." >&2
 	echo "warning: system permissions must be granted again after every rebuild." >&2

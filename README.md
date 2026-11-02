@@ -14,6 +14,8 @@
 
 功能对照见 [Feature-parity.md](Documentation/Feature-parity.md)，实施计划见 [OpenSpec 变更](openspec/changes/port-windows-feature-parity/proposal.md)。
 
+发布流程见 [Release.md](Documentation/Release.md)：执行 `./scripts/release/release.sh <version> --push` 推送标签后，由 GitHub Actions 构建 Apple Silicon 与 Intel 安装包并发布 Release。
+
 原生 Space 创建、删除、重命名及导入时恢复结构暂不在范围内。缺失目标桌面必须报告，不能静默映射或创建。
 
 ## 来源与许可

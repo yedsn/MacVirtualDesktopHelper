@@ -1,0 +1,212 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: macos-14
+    env:
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            test: true
+          - arch: x86_64
+            test: false
+    steps:
+      - name: Check release ref
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != v* ]]; then
+            echo "Release builds must run from a v* tag, got ${GITHUB_REF_NAME}." >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate version
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [[ "v$version" != "${GITHUB_REF_NAME}" ]]; then
+            echo "Resources/Info.plist version $version does not match tag ${GITHUB_REF_NAME}." >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        if: matrix.test
+        run: ./Tests/run.sh
+
+      - name: Import Developer ID certificate
+        if: env.APPLE_CERTIFICATE_P12 != ''
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          cert_path="$RUNNER_TEMP/developer-id.p12"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$cert_path"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$cert_path" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application.*\)"/\1/p' | head -n 1)"
+          if [[ -z "$identity" ]]; then
+            echo "Imported certificate is not a Developer ID Application identity." >&2
+            exit 1
+          fi
+          echo "WVDH_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          if [[ -n "${APPLE_ID:-}" && -n "${APPLE_TEAM_ID:-}" && -n "${APPLE_APP_PASSWORD:-}" ]]; then
+            echo "WVDH_NOTARIZE=1" >> "$GITHUB_ENV"
+          else
+            echo "WVDH_NOTARIZE=0" >> "$GITHUB_ENV"
+          fi
+          rm -f "$cert_path"
+
+      - name: Package ${{ matrix.arch }}
+        run: ./scripts/release/package.sh ${{ matrix.arch }} --output dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Verify assets
+        run: |
+          ls -lh dist
+          for arch in arm64 x86_64; do
+            compgen -G "dist/*_${arch}.dmg" >/dev/null || { echo "Missing $arch DMG" >&2; exit 1; }
+            compgen -G "dist/*_${arch}.zip" >/dev/null || { echo "Missing $arch ZIP" >&2; exit 1; }
+            test -f "dist/SHA256SUMS.$arch" || { echo "Missing $arch checksums" >&2; exit 1; }
+          done
+          cat dist/SHA256SUMS.arm64 dist/SHA256SUMS.x86_64 > dist/SHA256SUMS
+          rm -f dist/SHA256SUMS.arm64 dist/SHA256SUMS.x86_64
+          sort -k2 dist/SHA256SUMS -o dist/SHA256SUMS
+          cat dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+
+      - name: Compose release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "macOS 虚拟桌面助手 ${GITHUB_REF_NAME}。"
+            echo
+            echo "| 安装包 | 架构 |"
+            echo "| --- | --- |"
+            echo "| \`MacVirtualDesktopHelper_${version}_arm64.dmg\` | Apple Silicon |"
+            echo "| \`MacVirtualDesktopHelper_${version}_x86_64.dmg\` | Intel |"
+            echo
+            echo "ZIP 是同一应用的压缩包；\`SHA256SUMS\` 可用于校验下载。"
+            echo
+            echo "应用需要单独授予辅助功能和屏幕录制权限，首次启动后在系统设置中确认。"
+            echo "若系统提示应用已损坏或无法验证，可在终端执行 \`xattr -cr /Applications/MacVirtualDesktopHelper.app\` 后再打开。"
+            echo
+            echo "## Changes"
+            echo
+            git log --no-merges --pretty='- %s' "$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"..HEAD
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md \
+            --verify-tag
+
+      - name: Verify published assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" --json assets \
+            --jq '.assets[].name' | tee /tmp/assets.txt
+          for pattern in 'MacVirtualDesktopHelper_.*_arm64\.dmg' 'MacVirtualDesktopHelper_.*_x86_64\.dmg' '^SHA256SUMS$'; do
+            grep -Eq "$pattern" /tmp/assets.txt || { echo "Release is missing asset matching $pattern" >&2; exit 1; }
+          done
+
+  sync-gitee:
+    name: Sync release to Gitee
+    if: ${{ vars.ENABLE_GITEE_SYNC == 'true' }}
+    needs: publish
+    runs-on: [self-hosted, linux, x64, gitee-sync]
+    env:
+      PYTHONUNBUFFERED: "1"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
+      GITEE_SYNC_PROXY: ${{ vars.GITEE_SYNC_PROXY }}
+    steps:
+      - name: Configure proxy for GitHub access
+        if: ${{ env.GITEE_SYNC_PROXY != '' }}
+        shell: bash
+        run: |
+          {
+            echo "HTTP_PROXY=$GITEE_SYNC_PROXY"
+            echo "HTTPS_PROXY=$GITEE_SYNC_PROXY"
+            echo "http_proxy=$GITEE_SYNC_PROXY"
+            echo "https_proxy=$GITEE_SYNC_PROXY"
+            echo "NO_PROXY=gitee.com,.gitee.com,localhost,127.0.0.1"
+            echo "no_proxy=gitee.com,.gitee.com,localhost,127.0.0.1"
+          } >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Sync GitHub assets to Gitee latest
+        run: |
+          if [[ -z "$GITEE_ACCESS_TOKEN" ]]; then
+            echo "GITEE_ACCESS_TOKEN is not configured." >&2
+            exit 1
+          fi
+          args=(
+            scripts/release/sync_gitee_release.py
+            --tag "${GITHUB_REF_NAME}"
+            --github-owner yedsn
+            --github-repo MacVirtualDesktopHelper
+            --gitee-owner hongxiaojian
+            --gitee-repo MacVirtualDesktopHelper
+            --asset-prefix MacVirtualDesktopHelper
+            --target-commitish main
+          )
+          if [[ -n "$GITEE_SYNC_PROXY" ]]; then
+            args+=(--proxy "$GITEE_SYNC_PROXY")
+          fi
+          python3 "${args[@]}"

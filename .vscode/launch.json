@@ -21,6 +21,13 @@
       "request": "launch",
       "command": "./Tests/run.sh",
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "release",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "./scripts/release/release.sh --push",
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

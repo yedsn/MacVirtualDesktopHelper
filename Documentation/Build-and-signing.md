@@ -16,7 +16,7 @@ codesign --verify --strict .build/MacVirtualDesktopHelper.app
 
 保持 Bundle ID `local.macvirtualdesktophelper`、签名身份及运行路径稳定，有助于系统持续识别辅助功能和屏幕录制授权。临时签名下重建可能导致授权失效，需要在系统设置重新核对。实际读取或操作成功才证明权限有效。
 
-这套脚本用于本地开发，没有实现公证、安装包发布或自动更新。登录启动使用系统 SMAppService，需要将应用放在固定位置后实测注册；构建目录中的成功运行不证明登录项可用。
+本地开发使用上述脚本；安装包、GitHub/Gitee 发布与可选的签名公证流程见 [Release.md](Release.md)。应用没有内置自动更新。登录启动使用系统 SMAppService，需要将应用放在固定位置后实测注册；构建目录中的成功运行不证明登录项可用。
 
 ## 日志与许可
 
