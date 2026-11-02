@@ -109,7 +109,7 @@ enum Localization {
   "无法启动 MacVirtualDesktopHelper": "Unable to start MacVirtualDesktopHelper", "无法打开支持页面": "Unable to open the support page",
   "无法确定桌面归属，暂不参与清理与规则操作。": "Desktop ownership is unknown; cleanup and rule actions are unavailable.",
   "无法读取有效的 Mac 配置备份，文件可能损坏或格式不兼容。Windows 备份的应用身份不能直接映射到 Mac。未修改本地数据。": "Could not read a valid Mac configuration backup. The file may be damaged or incompatible. Windows application identities cannot be mapped directly to Mac. Local data was not changed.",
-  "无窗口": "No Windows", "无需更新；存在歧义的窗口：": "No update needed. Ambiguous windows: ",
+  "无窗口": "No Windows", "所有已知窗口均已存在锁定规则。": "All known windows already have cleanup rules.", "无需更新；存在歧义的窗口：": "No update needed. Ambiguous windows: ",
   "时间": "Time", "显示方式": "Display mode", "更新 → ": "Updated → ",
   "更新桌面规则": "Update Desktop Rules", "更新锁定规则": "Update Cleanup Rules",
   "未知归属": "Unknown ownership", "未知桌面": "Unknown desktop",
