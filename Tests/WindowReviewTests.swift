@@ -37,6 +37,20 @@ import AppKit
    buttons.first { $0.title == "取消" }!.performClick(nil)
   }
   precondition(review.confirm(title: "临时预览测试", windows: windows, action: "执行") == nil)
-  print("PASS: modal preview exclusion, accepted IDs, Delete, empty confirmation disabled and reusable columns/selection")
+  // Reopen a populated table with fewer rows while alternating column layouts.
+  // AppKit may request old rows synchronously from addTableColumn.
+  for iteration in 0..<20 {
+   let shrinking = iteration % 2 == 1
+   let current = shrinking ? Array(windows.prefix(1)) : windows
+   interact { _, table, buttons in
+    precondition(table.numberOfRows == current.count)
+    precondition(table.tableColumns.count == (shrinking ? 2 : 3))
+    table.layoutSubtreeIfNeeded()
+    buttons.first { $0.title == "取消" }!.performClick(nil)
+   }
+   precondition(review.confirm(title: "重复预览", windows: current, action: "执行", details: shrinking ? [:] : [1: "A"]) == nil)
+  }
+  precondition(review.tableView(NSTableView(), viewFor: nil, row: 2) == nil)
+  print("PASS: modal preview exclusion, keyboard actions, and 20 reopenings with shrinking rows and alternating columns")
  }
 }

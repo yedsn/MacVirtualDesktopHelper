@@ -30,6 +30,11 @@ final class WindowReview: NSObject, NSTableViewDataSource, NSTableViewDelegate {
  private let count = NSTextField(labelWithString: "")
  private var confirmButton: NSButton?
  func confirm(title: String, windows: [DesktopWindow], action: String, details: [UInt32: String] = [:]) -> [DesktopWindow]? {
+  // Column changes can synchronously ask for views using the previous row count.
+  // Detach callbacks until both the model and columns describe the new preview.
+  table.delegate = nil
+  table.dataSource = nil
+  table.reloadData()
   candidates = windows
   self.details = details
   table.deselectAll(nil)
@@ -77,6 +82,7 @@ final class WindowReview: NSObject, NSTableViewDataSource, NSTableViewDelegate {
  }
  func numberOfRows(in tableView: NSTableView) -> Int { candidates.count }
  func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+  guard candidates.indices.contains(row) else { return nil }
   let item = candidates[row]
   let value = tableColumn?.identifier.rawValue == "app" ? item.ownerName : tableColumn?.identifier.rawValue == "detail" ? details[item.id] ?? "" : item.displayTitle
   let identifier = tableColumn?.identifier ?? NSUserInterfaceItemIdentifier("review")
