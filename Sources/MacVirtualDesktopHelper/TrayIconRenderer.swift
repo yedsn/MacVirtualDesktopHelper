@@ -41,9 +41,13 @@ enum TrayIconRenderer {
   NSColor.clear.setFill()
   NSRect(x: 0, y: 0, width: size, height: size).fill()
   blue.withAlphaComponent(225.0 / 255).setFill()
-  let pane = CGFloat(size) * 0.94 / 2
-  let step = pane + CGFloat(size) * 0.06
-  for x in [0.0, step] { for y in [0.0, step] {
+  // Dock icons keep a transparent margin so the mark matches the visual weight
+  // of neighbouring app icons instead of touching the tile edges.
+  let inset = CGFloat(size) * 56 / 512
+  let content = CGFloat(size) - inset * 2
+  let pane = content * 47 / 100
+  let step = pane + content * 6 / 100
+  for x in [inset, inset + step] { for y in [inset, inset + step] {
    NSRect(x: x, y: y, width: pane, height: pane).fill()
   }}
   NSGraphicsContext.restoreGraphicsState()
