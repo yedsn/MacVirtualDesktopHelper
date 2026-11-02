@@ -99,6 +99,10 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   }
   settingsController?.reload(); settingsController?.window?.center(); settingsController?.showWindow(nil)
  }
+ func configureSettingsTransaction(prepare: @escaping (ApplicationSettings) throws -> Void, rollback: @escaping (ApplicationSettings) -> Void) {
+  ruleStore?.prepareSettings = prepare
+  ruleStore?.rollbackSettings = rollback
+ }
  private func applyAppearance() {
   switch applicationSettings.theme {
   case "light": NSApp.appearance = NSAppearance(named: .aqua)

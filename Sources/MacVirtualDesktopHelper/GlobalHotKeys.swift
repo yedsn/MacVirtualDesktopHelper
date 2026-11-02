@@ -5,6 +5,7 @@ final class GlobalHotKeys {
  private var handler: EventHandlerRef?
  private var registrations: [EventHotKeyRef] = []
  private var actions: [UInt32: String] = [:]
+ private var workingBindings: [HotKeyBinding] = []
  var perform: ((String) -> Void)?
  init() {
   var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -30,6 +31,7 @@ final class GlobalHotKeys {
   }
   // Invalid input must not tear down the last working configuration.
   guard errors.isEmpty else { return errors }
+  let previous = workingBindings
   registrations.forEach { UnregisterEventHotKey($0) }
   registrations.removeAll(); actions.removeAll()
   for (index, binding) in bindings.enumerated() {
@@ -38,6 +40,18 @@ final class GlobalHotKeys {
    let status = RegisterEventHotKey(binding.keyCode, binding.modifiers, EventHotKeyID(signature: 0x4D564448, id: id), GetApplicationEventTarget(), 0, &ref)
    if status == noErr, let ref { registrations.append(ref); actions[id] = binding.action }
    else { errors.append(binding.action + "：注册冲突或系统拒绝（".localized + String(status) + "）") }
+  }
+  if errors.isEmpty { workingBindings = bindings }
+  else {
+   registrations.forEach { UnregisterEventHotKey($0) }
+   registrations.removeAll(); actions.removeAll()
+   for (index, binding) in previous.enumerated() {
+    var ref: EventHotKeyRef?
+    let id = UInt32(index + 1)
+    let status = RegisterEventHotKey(binding.keyCode, binding.modifiers, EventHotKeyID(signature: 0x4D564448, id: id), GetApplicationEventTarget(), 0, &ref)
+    if status == noErr, let ref { registrations.append(ref); actions[id] = binding.action }
+    else { errors.append(binding.action + "：恢复原快捷键失败") }
+   }
   }
   return errors
  }

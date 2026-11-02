@@ -65,6 +65,16 @@ final class SkyLightService {
 		connection = mainConnection()
 	}
 
+	/// Returns the actual current Space, including transient full-screen Spaces.
+	func currentSpace(displayUUID: String) -> (id: UInt64, isRegular: Bool)? {
+		let displays = copyManagedDisplaySpaces(connection) as? [[String: Any]] ?? []
+		let matching = displays.filter { (stringValue($0["Display Identifier"]) ?? "").caseInsensitiveCompare(displayUUID) == .orderedSame }
+		guard let display = matching.count == 1 ? matching.first : (displays.count == 1 ? displays.first : nil),
+			let current = display["Current Space"] as? [String: Any],
+			let id = uint64Value(current["id64"]) else { return nil }
+		return (id, spaceGetType(connection, id) == 0)
+	}
+
 	func spaces() -> [DesktopSpace] {
 		let displays = copyManagedDisplaySpaces(connection) as? [[String: Any]] ?? []
 		var result: [DesktopSpace] = []

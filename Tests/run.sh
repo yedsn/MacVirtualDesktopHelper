@@ -29,3 +29,5 @@ fi
 "$test_dir/rule-editor"
 "${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/Models.swift" "$sources/DesktopCardView.swift" Tests/WindowListKeyboardTests.swift -o "$test_dir/list-keyboard"
 "$test_dir/list-keyboard"
+"${SWIFTC[@]}" Sources/MacVirtualDesktopHelper/Localization.swift -target arm64-apple-macos13.0 "$sources/RuleStore.swift" "$sources/Models.swift" "$sources/WindowSwitcherSession.swift" Tests/WindowSwitcherTests.swift -o "$test_dir/window-switcher"
+"$test_dir/window-switcher"

@@ -30,7 +30,7 @@ final class AccessibilityWindowService {
 		NSWorkspace.shared.open(url)
 	}
 
-	func focus(_ target: DesktopWindow) -> String? {
+	func focus(_ target: DesktopWindow, activateAllWindows: Bool = true) -> String? {
 		guard isTrusted else {
 			return "需要先授予辅助功能权限。".localized
 		}
@@ -42,7 +42,9 @@ final class AccessibilityWindowService {
 		}
 
 		if app.isHidden { app.unhide() }
-		_ = app.activate(options: [.activateAllWindows])
+		// Activate only the target process without asking AppKit to raise every
+		// window owned by the application. The target AX window is raised below.
+		_ = app.activate(options: activateAllWindows ? [.activateAllWindows] : [])
 		let application = AXUIElementCreateApplication(target.pid)
 		AXUIElementSetMessagingTimeout(application, 1.5)
 		_ = AXUIElementSetAttributeValue(application, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
@@ -59,6 +61,15 @@ final class AccessibilityWindowService {
 
 	func containsWindow(_ target: DesktopWindow) -> Bool {
 		return accessibilityWindow(windowID: target.id, pid: target.pid) != nil
+	}
+	func isStandardWindow(_ target: DesktopWindow) -> Bool {
+		guard let window = accessibilityWindow(windowID: target.id, pid: target.pid) else { return false }
+		var role: CFTypeRef?
+		guard AXUIElementCopyAttributeValue(window, kAXRoleAttribute as CFString, &role) == .success,
+			role as? String == kAXWindowRole as String else { return false }
+		var subrole: CFTypeRef?
+		guard AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &subrole) == .success else { return true }
+		return [kAXStandardWindowSubrole as String, kAXDialogSubrole as String, kAXSystemDialogSubrole as String].contains(subrole as? String ?? "")
 	}
 
 	func isMinimized(_ target: DesktopWindow) -> Bool? {

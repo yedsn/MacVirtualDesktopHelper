@@ -93,6 +93,9 @@ struct ApplicationSettings: Codable {
  var windowManager = "built-in"
  var hideNavigationAtBounds = false
  var hotKeys: [HotKeyBinding]?
+ var windowSwitcherEnabled: Bool?
+ var windowSwitcherKeyCode: UInt32?
+ var windowSwitcherModifiers: UInt32?
  var overlay: OverlaySettings?
  var restoreWindowFocus: Bool?
  var menuIconSpacing: Double?
@@ -146,6 +149,8 @@ struct SnapshotSettings: Codable {
 }
 
 final class RuleStore {
+ var prepareSettings: ((ApplicationSettings) throws -> Void)?
+ var rollbackSettings: ((ApplicationSettings) -> Void)?
  private(set) var state: RuleState
  let url: URL
  init(url: URL) throws {
@@ -193,7 +198,14 @@ final class RuleStore {
    guard ["auto", "light", "dark"].contains(settings.theme),
     ["all-desktops", "navigation"].contains(settings.desktopDisplayMode),
     ["built-in", "system"].contains(settings.windowManager) else { throw validationError("应用设置无效") }
+   let switcherModifiers = settings.windowSwitcherModifiers ?? 2048
+   guard (settings.windowSwitcherKeyCode ?? 48) == 48, switcherModifiers != 0,
+    switcherModifiers & ~UInt32(256 | 2048 | 4096) == 0 else { throw validationError("窗口切换须使用 Command、Option 或 Control 加 Tab，Shift 保留用于反向选择") }
    var combinations = Set<String>()
+   if settings.windowSwitcherEnabled == true {
+    combinations.insert("48:" + String(switcherModifiers))
+    combinations.insert("48:" + String(switcherModifiers | 512))
+   }
    for hotkey in settings.hotKeys ?? [] {
     let desktop = hotkey.action.hasPrefix("desktop:") ? Int(hotkey.action.dropFirst(8)) : nil
     guard ["manager", "forward", "backward", "previous"].contains(hotkey.action) || (1...9).contains(desktop ?? 0),
@@ -225,8 +237,16 @@ final class RuleStore {
   let encoder = JSONEncoder()
   encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
   let data = try encoder.encode(next)
+  let previousSettings = state.settings ?? ApplicationSettings()
+  let settingsChanged = try encoder.encode(previousSettings) != encoder.encode(next.settings ?? ApplicationSettings())
+  if settingsChanged { try prepareSettings?(next.settings ?? ApplicationSettings()) }
+  do {
   try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
   try data.write(to: url, options: .atomic)
+  } catch {
+   if settingsChanged { rollbackSettings?(previousSettings) }
+   throw error
+  }
   state = next
  }
  func capture(name: String, automatic: Bool = false, maximumAutomatic: Int = 3) throws {

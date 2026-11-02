@@ -35,7 +35,7 @@ final class WindowCatalog {
 		self.skyLight = skyLight
 	}
 
-	func snapshot() -> WindowSnapshot {
+	func snapshot(targetSpaceID requestedSpaceID: UInt64? = nil) -> WindowSnapshot {
 		let spaces = skyLight.spaces()
 		let currentSpaceID = spaces.first(where: { $0.isCurrent })?.id
 		let spaceIDs = Set(spaces.map(\.id))
@@ -53,10 +53,10 @@ final class WindowCatalog {
 			return detected
 		}
 
-		for space in spaces {
+		for space in spaces where requestedSpaceID == nil || space.id == requestedSpaceID {
 			for windowID in skyLight.windowIDs(on: space.id) where !seenWindowIDs.contains(windowID) {
 				guard let info = windowInfo[windowID] else { continue }
-				guard shouldInclude(info: info, currentPID: currentPID) else { continue }
+				guard shouldInclude(info: info, currentPID: currentPID, includeSmallWindows: requestedSpaceID != nil) else { continue }
 
 				let associatedSpaceIDs = skyLight.spaceIDs(for: windowID).filter { spaceIDs.contains($0) }
 				guard !associatedSpaceIDs.isEmpty else { continue }
@@ -92,6 +92,7 @@ final class WindowCatalog {
 				window.isMinimized = minimizedWindowIDs(for: pid)?.contains(windowID) ?? false
 				window.isApplicationHidden = app?.isHidden ?? false
 				window.isAccessibilityUnavailable = !accessibility.containsWindow(window)
+				if requestedSpaceID != nil, !window.isAccessibilityUnavailable, !accessibility.isStandardWindow(window) { continue }
 				for memberSpaceID in associatedSpaceIDs {
 					windowsBySpace[memberSpaceID, default: []].append(window)
 				}
@@ -109,7 +110,7 @@ final class WindowCatalog {
 		}
 
   // CG may retain closed records. Only expose unmatched records still present in AX.
-  if accessibility.isTrusted {
+  if accessibility.isTrusted && requestedSpaceID == nil {
    var unknown: [DesktopWindow] = []
    for (windowID, info) in windowInfo where !seenWindowIDs.contains(windowID) {
     guard shouldInclude(info: info, currentPID: currentPID), skyLight.spaceIDs(for: windowID).allSatisfy({ !spaceIDs.contains($0) }) else { continue }
@@ -147,14 +148,14 @@ final class WindowCatalog {
 		return result
 	}
 
-	private func shouldInclude(info: [String: Any], currentPID: pid_t) -> Bool {
+	private func shouldInclude(info: [String: Any], currentPID: pid_t, includeSmallWindows: Bool = false) -> Bool {
 		guard intValue(info[kCGWindowLayer as String]) == 0 else { return false }
 		guard let pid = int32Value(info[kCGWindowOwnerPID as String]), pid > 0, pid != currentPID else { return false }
 		guard let alpha = doubleValue(info[kCGWindowAlpha as String]), alpha > 0.01 else { return false }
 		let bounds = info[kCGWindowBounds as String] as? [String: Any] ?? [:]
 		let width = doubleValue(bounds["Width"]) ?? 0
 		let height = doubleValue(bounds["Height"]) ?? 0
-		guard width >= 80, height >= 40 else { return false }
+		guard includeSmallWindows ? (width > 0 && height > 0) : (width >= 80 && height >= 40) else { return false }
 
 		let app = NSRunningApplication(processIdentifier: pid)
 		let ownerName = stringValue(info[kCGWindowOwnerName as String]) ?? app?.localizedName ?? ""

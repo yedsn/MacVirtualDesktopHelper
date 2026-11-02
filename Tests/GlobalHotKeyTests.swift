@@ -18,6 +18,13 @@ import AppKit
   precondition(!first.reload([binding]).isEmpty, "Duplicate reload released the working shortcut")
   precondition(second.reload([]).isEmpty)
   precondition(first.reload([binding]).isEmpty)
+  let alternative = HotKeyBinding(action: "manager", keyCode: 3, modifiers: binding.modifiers)
+  precondition(second.reload([alternative]).isEmpty)
+  precondition(!first.reload([alternative]).isEmpty)
+  let probe = GlobalHotKeys()
+  precondition(!probe.reload([binding]).isEmpty, "Failed replacement lost the original registration")
+  precondition(first.reload([]).isEmpty)
+  precondition(probe.reload([binding]).isEmpty)
   print("PASS: registration, conflict detection, unregister; invalid and duplicate reload preserve working shortcuts")
  }
 }

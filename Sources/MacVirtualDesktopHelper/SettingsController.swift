@@ -34,6 +34,8 @@ final class SettingsController: NSWindowController {
  private let startupText = NSTextField(string: "MacVirtualDesktopHelper")
  private let startupDuration = NSTextField(string: "2")
  private let restoreFocus = NSButton(checkboxWithTitle: "切换后恢复目标桌面上次窗口焦点".localized, target: nil, action: nil)
+ private let windowSwitcher = NSButton(checkboxWithTitle: "启用当前桌面窗口切换（Option + Tab）".localized, target: nil, action: nil)
+ private let switcherShortcut = NSTextField(string: "Option+Tab")
  private let dockIcon = NSButton(checkboxWithTitle: "在 Dock 显示应用图标".localized, target: nil, action: nil)
  private let glass = NSButton(checkboxWithTitle: "启用主窗口毛玻璃背景".localized, target: nil, action: nil)
  private let overviewSize = NSPopUpButton()
@@ -80,10 +82,11 @@ final class SettingsController: NSWindowController {
   let stack = NSStackView(views: [
    section("窗口与外观".localized, [row("语言（重启后生效）".localized, language), row("主题".localized, theme), row("概览文字大小".localized, overviewSize), dockIcon, glass]),
    section("菜单栏".localized, [row("显示方式".localized, mode), row("间距（0–24 点）".localized, iconSpacing), appearance, nameInitial, navigationArrows, row("向前符号".localized, previousSymbol), row("向后符号".localized, nextSymbol), row("禁用透明度（0–1）".localized, disabledOpacity), hideBounds]),
-   section("操作与启动".localized, [row("窗口管理器".localized, manager), restoreFocus, startupOverlay, row("启动提示文字".localized, startupText), row("提示时长（秒）".localized, startupDuration), NSStackView(views: [hotkeys, overlay, NSButton(title: "浮层外观…".localized, target: self, action: #selector(editOverlayAppearance))]), login, loginStatus]),
+   section("操作与启动".localized, [row("窗口管理器".localized, manager), restoreFocus, windowSwitcher, startupOverlay, row("启动提示文字".localized, startupText), row("提示时长（秒）".localized, startupDuration), NSStackView(views: [hotkeys, overlay, NSButton(title: "浮层外观…".localized, target: self, action: #selector(editOverlayAppearance))]), login, loginStatus]),
    section("配置与规则".localized, [backupActions])
   ])
   stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 24
+  stack.addArrangedSubview(row("窗口切换快捷键", switcherShortcut))
   let scroll = NSScrollView()
   scroll.hasVerticalScroller = true; scroll.drawsBackground = false
   let document = SettingsDocumentView(frame: NSRect(x: 0, y: 0, width: 600, height: 900))
@@ -197,6 +200,8 @@ final class SettingsController: NSWindowController {
   startupText.stringValue = settings.startupOverlayText ?? "MacVirtualDesktopHelper"
   startupDuration.stringValue = String(settings.startupOverlayDuration ?? 2)
   restoreFocus.state = settings.restoreWindowFocus == true ? .on : .off
+  windowSwitcher.state = settings.windowSwitcherEnabled == true ? .on : .off
+  switcherShortcut.stringValue = HotKeyText.render([HotKeyBinding(action: "manager", keyCode: settings.windowSwitcherKeyCode ?? 48, modifiers: settings.windowSwitcherModifiers ?? 2048)]).components(separatedBy: "=").last ?? "Option+Tab"
   iconSpacing.stringValue = String(settings.menuIconSpacing ?? 8)
   dockIcon.state = (settings.showDockIcon ?? true) ? .on : .off
   glass.state = (settings.frostedWindow ?? true) ? .on : .off
@@ -251,6 +256,12 @@ final class SettingsController: NSWindowController {
   settings.showNavigationArrows = navigationArrows.state == .on
   settings.hideNavigationAtBounds = hideBounds.state == .on
   settings.restoreWindowFocus = restoreFocus.state == .on
+  settings.windowSwitcherEnabled = windowSwitcher.state == .on
+  do {
+   guard let binding = try HotKeyText.parse("manager=" + switcherShortcut.stringValue).first else { throw hotKeyError() }
+   settings.windowSwitcherKeyCode = binding.keyCode
+   settings.windowSwitcherModifiers = binding.modifiers
+  } catch { NSAlert(error: error).runModal(); return }
   do { try store.update { $0.settings = settings }; changed?() } catch { NSAlert(error: error).runModal() }
  }
  @objc private func editHotKeys() {

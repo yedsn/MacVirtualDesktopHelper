@@ -12,6 +12,7 @@ import Foundation
   }
   let empty = try HotKeyText.parse("\n ").isEmpty
   precondition(empty)
+  do { _ = try HotKeyText.parse("window-switcher=Option+Tab"); preconditionFailure("Dedicated switcher setting must not be silently shadowed") } catch {}
   print("PASS: all 128 key codes round-trip; common keys, case, invalid and duplicate shortcuts")
  }
 }
