@@ -64,7 +64,9 @@ struct DesktopWindow: Identifiable {
 		hasKnownSpace && (awaitsDesktopActivation || (!isExcludedFromSwitcher && !isAccessibilityUnavailable))
 	}
 	var isEligibleForBulkOperations: Bool { hasKnownSpace && !isExcludedFromSwitcher && !belongsToBackgroundSection && !isAccessibilityUnavailable && isMinimizedStateKnown }
-	var isDesktopRuleUpdateCandidate: Bool { isOverviewDesktopCandidate && !isSticky }
+	// SkyLight rule moves also support inactive desktops and hidden/minimized windows.
+	// Keep rule recording and application independent of AX bulk-operation access.
+	var isDesktopRuleCandidate: Bool { isOverviewDesktopCandidate && !isSticky }
 	var backgroundStateDescription: String {
 		[isMinimized ? "已最小化".localized : nil, isApplicationHidden ? "应用已隐藏".localized : nil]
 			.compactMap { $0 }.joined(separator: " · ")

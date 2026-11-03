@@ -455,9 +455,9 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   lockEditor?.showWindow(nil)
  }
 
- private func ruleWindows(forUpdate: Bool = false) -> [RuleWindowIdentity] {
+ private func ruleWindows() -> [RuleWindowIdentity] {
   uniqueWindows.compactMap { item in
-			guard !item.isSticky, (forUpdate ? item.isDesktopRuleUpdateCandidate : item.isEligibleForBulkOperations),
+			guard item.isDesktopRuleCandidate,
 				let space = snapshot?.spaces.first(where: { $0.id == item.spaceID }) else { return nil }
    return RuleWindowIdentity(id: item.id, bundleID: item.bundleID, applicationPath: NSRunningApplication(processIdentifier: item.pid)?.bundleURL?.path ?? "", title: item.title, spaceUUID: space.uuid, displayUUID: space.displayUUID, desktopIndex: space.index)
   }
@@ -502,7 +502,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   let missingTargets = ruleStore.state.desktopRules.filter { targetSpace($0) == nil }.count
   let movable = ruleStore.state.desktopRules.compactMap { rule -> DesktopWindow? in
    guard let match = DesktopRuleMatcher.uniqueWindow(for: rule, rules: ruleStore.state.desktopRules, windows: identities),
-    let target = targetSpace(rule), target.uuid != match.spaceUUID else { return nil }
+    let target = targetSpace(rule), (target.uuid != match.spaceUUID || target.displayUUID != match.displayUUID) else { return nil }
    return uniqueWindows.first { $0.id == match.id }
   }
   guard !movable.isEmpty else { setStatus("没有可移动的唯一匹配窗口；目标缺失规则 ".localized + String(missingTargets) + " 条，歧义及已归位项保持不动。".localized); return }
@@ -566,7 +566,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard let ruleStore else { setStatus("规则状态不可用，无法更新桌面规则。".localized, isError: true); return }
   guard CGPreflightScreenCaptureAccess() else { setStatus("请先授予屏幕录制权限，以读取标题并更新桌面规则。".localized, isError: true); return }
   snapshot = catalog.snapshot()
-  let update = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows(forUpdate: true))
+  let update = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows())
   let ids = Set(update.changes.map(\.windowID))
   guard !ids.isEmpty else {
    setStatus("无需更新；存在歧义的窗口：".localized + String(update.ambiguousWindowIDs.count)); return
@@ -579,7 +579,7 @@ final class OverviewWindowController: NSWindowController, NSOutlineViewDataSourc
   guard let reviewed = windowReview.confirm(title: "检查桌面规则更改".localized, windows: uniqueWindows.filter { ids.contains($0.id) }, action: "保存桌面规则".localized, details: previewDetails) else { return }
   let accepted = Set(reviewed.map(\.id))
   snapshot = catalog.snapshot()
-  let currentUpdate = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows(forUpdate: true))
+  let currentUpdate = DesktopRuleMatcher.update(rules: ruleStore.state.desktopRules, windows: ruleWindows())
   let validChanges = update.changes.filter { original in
    guard accepted.contains(original.windowID),
     let live = uniqueWindows.first(where: { $0.id == original.windowID }),

@@ -109,9 +109,10 @@ import AppKit
  precondition(!unavailableOther.isEligibleForBulkOperations && offDesktop.isEligibleForBulkOperations)
  precondition(offDesktop.cleanupCandidate(in: [unavailableOther], isProtected: { _ in false }) == nil)
  precondition(unavailableOther.isOverviewDesktopCandidate)
- precondition(unavailableOther.isDesktopRuleUpdateCandidate)
- precondition(hidden.isDesktopRuleUpdateCandidate && minimized.isDesktopRuleUpdateCandidate)
- precondition(!window.isDesktopRuleUpdateCandidate) // shared windows have no unique rule target
+ precondition(unavailableOther.isDesktopRuleCandidate, "Rule application must include windows awaiting inactive-desktop AX activation")
+ precondition(hidden.isDesktopRuleCandidate && minimized.isDesktopRuleCandidate)
+ precondition(!hidden.isEligibleForBulkOperations && !minimized.isEligibleForBulkOperations)
+ precondition(!window.isDesktopRuleCandidate) // shared windows have no unique rule target
  precondition(offDesktop.cleanupCandidate(in: [unavailableOther], requiresOperationAccess: false, isProtected: { _ in false }) != nil)
  precondition(offDesktop.cleanupCandidate(in: [unavailableOther], requiresOperationAccess: false, isProtected: { _ in true }) == nil)
  precondition(unavailableOther.cleanupCandidate(in: [offDesktop], isProtected: { _ in false }) != nil)
@@ -142,7 +143,7 @@ import AppKit
  precondition(specialGroups.count == 3 && specialGroups.last?.space.id == DesktopSpace.otherWindowsID)
  precondition(specialGroups.last?.windows.count == 1 && specialGroups.last?.windows.first?.id == special.id)
  precondition(!special.isEligibleForBulkOperations)
- precondition(!special.isDesktopRuleUpdateCandidate && !unknownWindow.isDesktopRuleUpdateCandidate)
+ precondition(!special.isDesktopRuleCandidate && !unknownWindow.isDesktopRuleCandidate)
  print("PASS: switcher candidates including hidden/minimized stay on desktops; excluded and unknown windows deduplicate in final Other windows")
 
  Localization.language = "en"
